@@ -1,11 +1,15 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, like, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { jobs } from "@/infrastructure/db/schema";
 import { claimJobs, completeJob, enqueueJob, runDueJobs } from "@/modules/operations";
 import { openTestDatabase } from "./support/fixtures";
 
 const { db, pool } = openTestDatabase(15);
-afterAll(() => pool.end());
+afterAll(async () => {
+  // Leave no fake job types behind for later suites (e2e runs a real worker on this database).
+  await db.delete(jobs).where(like(jobs.type, "test.%"));
+  await pool.end();
+});
 
 /** Each test uses its own job type so jobs from other test files never interfere. */
 const jobType = () => `test.${crypto.randomUUID()}`;

@@ -74,4 +74,5 @@ Structured JSON logs via `src/infrastructure/logging/logger.ts` with secret reda
 - `pnpm test:e2e` builds nothing itself: run `pnpm build` first. Playwright starts `next start` on :3100 with `APP_ENV=test` (no auth rate limits, simulator scenarios on) and `DATABASE_POOL_MAX=10`, against the database in `DATABASE_URL` (seeded). Workers: 4 locally, 2 in CI.
 - Journeys use test-only SQL for time travel (expiring a hold, making jobs due) via `tests/e2e/support.ts`.
 - Accessibility: axe-core (WCAG 2.1 A/AA) on every attendee page; serious/critical violations fail.
+- To mirror CI's data (integration-test fixtures, including events without images): `pnpm test:integration`, then `DATABASE_URL=<test url> APP_ENV=test pnpm db:seed`, then `DATABASE_URL=<test url> pnpm test:e2e`. The dev database alone can hide data-dependent failures.
 - `CAPTURE=1` writes report screenshots to `docs/reports/m2/`; `METRICS=1` prints LCP, CLS and transfer sizes.

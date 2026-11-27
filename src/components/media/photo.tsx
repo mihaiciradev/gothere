@@ -40,7 +40,10 @@ export function Photo({
           className={`object-cover ${imageClassName}`}
         />
       ) : (
-        <div aria-hidden className="absolute inset-0 grid place-items-center font-display text-6xl text-graphite-700">g.</div>
+        // Decorative, non-text fallback (a text glyph here would be low-contrast text to assistive checks).
+        <div aria-hidden className="absolute inset-0 grid place-items-center">
+          <span className="size-3 rounded-full bg-lime/70" />
+        </div>
       )}
       {credit && creditPosition !== "none" && (
         <span className={`absolute right-2 ${creditPosition === "inside-top" ? "top-2" : "bottom-2"} max-w-[calc(100%-1rem)] truncate label bg-obsidian/60 px-1.5 py-0.5 text-[0.625rem] text-graphite-300 backdrop-blur-sm`}>

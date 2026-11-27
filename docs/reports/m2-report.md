@@ -100,6 +100,7 @@ indicative only:
 ## 6. Accessibility verification
 
 - **Automated**: axe-core WCAG 2.1 A/AA on home, discover, discover-empty, event, sign-in, sign-up, checkout and wallet, desktop and mobile — **0 serious/critical violations** (enforced in CI).
+- CI found one more after the first push: events **without** a photo rendered a decorative "g." glyph in graphite-700 (low-contrast text). The dev database has a photo for every event, so it only appeared on CI's fixture data. The fallback is now a non-text mark, and e2e passes on both databases.
 - axe initially found real failures, now fixed: `graphite-500` text on dark (2.9:1 → `graphite-400`, 5.6:1) and violet text on raised panels (4.49:1 → new `violet-soft`, 6.1:1).
 - **Reduced motion**: a real bug was found and fixed — titles were invisible for reduced-motion users because the first render branched on `useReducedMotion` (hydration mismatch). Now `MotionConfig reducedMotion="user"` with identical server/client markup; marquee and pulse disabled by CSS.
 - **Keyboard**: skip link (tested), visible focus rings in accent colour, steppers are buttons with labelled actions and live quantity output (tested), Escape closes the mobile menu, radio group for simulator outcomes.
