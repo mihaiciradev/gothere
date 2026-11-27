@@ -141,6 +141,8 @@ export const inventoryItems = pgTable(
       columns: [t.experienceId, t.eventId],
       foreignColumns: [experiences.id, experiences.eventId],
     }).onDelete("cascade"),
+    // Target for composite FKs that pin reservation lines and tickets to the same event as the item.
+    unique("inventory_items_id_event_unique").on(t.id, t.eventId),
     index("inventory_items_event_idx").on(t.eventId),
     index("inventory_items_experience_idx").on(t.experienceId),
     check("inventory_items_price_non_negative", sql`${t.priceMinor} >= 0`),
