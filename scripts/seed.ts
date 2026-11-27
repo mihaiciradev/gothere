@@ -11,6 +11,7 @@ import {
 } from "../src/infrastructure/db/schema";
 import { assertNonProduction, loadLocalEnv } from "./lib/env";
 import { seedEvents, seedOrganizations, seedUsers } from "./seed-data";
+import { seedPurchaseHistory } from "./seed-history";
 
 loadLocalEnv();
 assertNonProduction("Seeding");
@@ -22,7 +23,13 @@ function required(name: string, minLength = 1): string {
 }
 
 const databaseUrl = required("DATABASE_URL");
-const passwords = { demo: required("SEED_DEMO_PASSWORD", 12), admin: required("SEED_ADMIN_PASSWORD", 16) };
+// Administrator accounts are created only where they cannot be reached publicly, unless explicitly allowed.
+const appEnv = process.env.APP_ENV ?? "local";
+const seedAdmin = appEnv === "local" || appEnv === "test" || process.env.SEED_ALLOW_ADMIN === "true";
+const passwords = {
+  demo: required("SEED_DEMO_PASSWORD", 12),
+  admin: seedAdmin ? required("SEED_ADMIN_PASSWORD", 16) : "",
+};
 
 const { db, pool } = createDatabase(databaseUrl, 2);
 const auth = createAuth({
@@ -45,7 +52,10 @@ async function seedUser(user: (typeof seedUsers)[number]): Promise<string> {
 
 async function main() {
   const userIds = new Map<string, string>();
-  for (const user of seedUsers) userIds.set(user.key, await seedUser(user));
+  for (const user of seedUsers) {
+    if (user.password === "admin" && !seedAdmin) continue;
+    userIds.set(user.key, await seedUser(user));
+  }
 
   const orgIds = new Map<string, string>();
   for (const org of seedOrganizations) {
@@ -133,6 +143,8 @@ async function main() {
     }
   }
 
+  const history = await seedPurchaseHistory(db);
+
   console.log(
     JSON.stringify({
       level: "info",
@@ -140,6 +152,9 @@ async function main() {
       users: userIds.size,
       organizations: orgIds.size,
       events: seedEvents.length,
+      adminSeeded: seedAdmin,
+      seedOrders: history.orders,
+      historySkipped: history.skipped,
     }),
   );
 }
