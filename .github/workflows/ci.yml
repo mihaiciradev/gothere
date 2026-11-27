@@ -68,4 +68,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
+          # No install in this job, so there is no pnpm store to cache.
+          package-manager-cache: false
       - run: pnpm audit --prod --audit-level high
