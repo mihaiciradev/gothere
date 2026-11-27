@@ -43,6 +43,7 @@ CI runs all of the above on every push and pull request (`.github/workflows/ci.y
 | Document | Purpose |
 | --- | --- |
 | [docs/project-state.md](docs/project-state.md) | Milestone status and next actions |
+| [docs/reports/](docs/reports/) | Milestone implementation reports |
 | [docs/product.md](docs/product.md) | Product pillars and scope |
 | [docs/architecture.md](docs/architecture.md) | Modules, boundaries, domain model, design system |
 | [docs/invariants.md](docs/invariants.md) | Business invariants and how each is enforced |

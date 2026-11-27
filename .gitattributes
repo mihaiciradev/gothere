@@ -1,0 +1,23 @@
+# Normalize line endings: LF in the repository and in every working tree (Windows, macOS, Linux, CI).
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets.
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Generated files: collapsed in GitHub reviews (still diffable locally for supply-chain review).
+pnpm-lock.yaml linguist-generated=true
+drizzle/meta/*.json linguist-generated=true

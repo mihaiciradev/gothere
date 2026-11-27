@@ -2,6 +2,8 @@
 
 Last updated: 2026-11-27 · Current milestone: **M0 complete — awaiting architecture and security review**. Do not start M1 until the review is closed.
 
+Review package: [reports/m0-report.md](reports/m0-report.md).
+
 ## Milestones
 
 | Milestone | Status |
@@ -15,7 +17,7 @@ Last updated: 2026-11-27 · Current milestone: **M0 complete — awaiting archit
 
 ## M0 delivered
 
-- Toolchain: Node 24 (`.node-version`, `engines`), pnpm 10.34.9 via Corepack, strict TypeScript (`noUncheckedIndexedAccess`), ESLint (no `any`, type-only imports, no stray `console`).
+- Toolchain: Node 24 (`.node-version`, `engines`), pnpm 10.34.9 via Corepack, `.gitattributes` (LF everywhere), strict TypeScript (`noUncheckedIndexedAccess`), ESLint (no `any`, type-only imports, no stray `console`).
 - Architecture: module layout and dependency rules enforced by dependency-cruiser (`pnpm boundaries`), each rule proven against a deliberate violation.
 - Environment: Zod-validated server env (`src/infrastructure/env.ts`), `.env.example`.
 - Database: Drizzle schema for identity, tenancy, catalogue, inventory, reservations, payments, orders, tickets and audit; 2 migrations (initial schema; append-only audit triggers); Docker Postgres 17 with dev and test databases; production-guarded migrate and seed scripts.
@@ -31,7 +33,7 @@ Last updated: 2026-11-27 · Current milestone: **M0 complete — awaiting archit
 - No email verification (R-01). No CSP (R-02).
 - Services for reservations, payments, orders and tickets do not exist yet; only their schema and DB-level invariants.
 - Sentry, AI Gateway, Anthropic SDK, Motion/GSAP/Radix/Recharts not installed yet — added in the milestone that first uses them.
-- Not deployed. No Neon project, Vercel project or GitHub remote configured.
+- Not deployed. GitHub repository connected with CI; no Neon or Vercel project yet.
 
 ## Next actions (M1 — transactional core)
 
@@ -47,4 +49,4 @@ Last updated: 2026-11-27 · Current milestone: **M0 complete — awaiting archit
 
 ## Open decisions for the CTO
 
-See the M0 report: GitHub repository and remote, Neon project, Vercel project, Anthropic API access and budget, admin demo exposure.
+See [reports/m0-report.md §12](reports/m0-report.md#12-decisions-requested-from-the-human-cto): Neon project, Vercel project, Anthropic API access and budget, admin demo exposure, review sign-off.
