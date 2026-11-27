@@ -51,10 +51,10 @@ module.exports = {
     },
     {
       name: "components-no-server-internals",
-      comment: "UI components must not reach the database, auth internals or secrets.",
+      comment: "UI components are presentational: no database, auth internals, secrets, business modules or app routes.",
       severity: "error",
       from: { path: "^src/components/" },
-      to: { path: "^src/(infrastructure|ai|actions)/" },
+      to: { path: "^src/(infrastructure|ai|actions|modules|app|composition)/" },
     },
     {
       name: "composition-uses-public-module-api",

@@ -72,18 +72,29 @@ export function idempotencyKey(request: Request): string {
   return key;
 }
 
+// Per-instance throttle: at most one opportunistic pass at a time and one per 5 s. Not a correctness
+// mechanism (expiry and acceptance use the database clock); it only prevents polling stampedes.
+let passRunning = false;
+let lastPassAt = 0;
+
 /** Runs a maintenance pass after the response is sent, when the platform supports it. Best effort only. */
 export function kickOperations(): void {
+  if (passRunning || Date.now() - lastPassAt < 5_000) return;
+  passRunning = true;
+  lastPassAt = Date.now();
   try {
     after(async () => {
       try {
         await runOperationsCycle(undefined, { jobLimit: 10 });
       } catch (error) {
         logger.warn("background operations pass failed", { error });
+      } finally {
+        passRunning = false;
       }
     });
   } catch {
     // Outside a request scope (e.g. tests): nothing to schedule.
+    passRunning = false;
   }
 }
 

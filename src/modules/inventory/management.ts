@@ -6,6 +6,7 @@ import { recordAudit } from "@/modules/audit";
 import type { Actor } from "@/modules/identity";
 import { requireOrganizationPermission } from "@/modules/organizations";
 import { AppError } from "@/shared/errors";
+import { assertUuid } from "@/shared/ids";
 
 export const inventoryPatchSchema = z
   .object({
@@ -42,6 +43,7 @@ export async function createInventoryItem(tx: Transaction, item: NewInventoryIte
 
 /** Price changes apply to new reservations only; existing reservations keep their captured price. */
 export async function updateInventoryItem(db: Database, actor: Actor, inventoryItemId: string, input: unknown) {
+  assertUuid(inventoryItemId, "Inventory item");
   const patch = inventoryPatchSchema.parse(input);
   return db.transaction(async (tx) => {
     const [item] = await tx.select().from(inventoryItems).where(eq(inventoryItems.id, inventoryItemId)).for("update");

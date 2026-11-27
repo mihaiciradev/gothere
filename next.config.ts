@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  images: {
+    // Unsplash images are resized by their CDN; see src/components/media/image-loader.ts.
+    loader: "custom",
+    loaderFile: "./src/components/media/image-loader.ts",
+  },
   turbopack: {
     rules: {
       "*.css": {

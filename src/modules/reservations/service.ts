@@ -7,6 +7,7 @@ import { getEventForSale } from "@/modules/events";
 import type { Actor } from "@/modules/identity";
 import { type UnitLine, releaseUnits, reserveUnits } from "@/modules/inventory";
 import { AppError } from "@/shared/errors";
+import { assertUuid } from "@/shared/ids";
 import {
   type ClosingStatus,
   MAX_ACTIVE_RESERVATIONS_PER_USER,
@@ -29,6 +30,8 @@ export type ReservationView = {
   currency: string;
   totalMinor: number;
   expiresAt: Date;
+  /** Seconds until expiry by the database clock (0 once past). Clients count down from this, never from their own clock. */
+  secondsRemaining: number;
   createdAt: Date;
   origin: ReservationRow["origin"];
   items: { inventoryItemId: string; name: string; quantity: number; unitPriceMinor: number }[];
@@ -51,6 +54,9 @@ export async function getReservationLines(db: DbExecutor, reservationId: string)
 }
 
 async function toView(db: DbExecutor, row: ReservationRow): Promise<ReservationView> {
+  const clock = await db.execute<{ seconds: number }>(
+    sql`SELECT greatest(0, floor(extract(epoch FROM (${row.expiresAt.toISOString()}::timestamptz - now()))))::int AS seconds`,
+  );
   return {
     id: row.id,
     eventId: row.eventId,
@@ -59,6 +65,7 @@ async function toView(db: DbExecutor, row: ReservationRow): Promise<ReservationV
     currency: row.currency,
     totalMinor: row.totalMinor,
     expiresAt: row.expiresAt,
+    secondsRemaining: row.status === "active" ? (clock.rows[0]?.seconds ?? 0) : 0,
     createdAt: row.createdAt,
     origin: row.origin,
     items: await getReservationLines(db, row.id),
@@ -231,6 +238,7 @@ export async function sweepOverdueReservations(
 
 /** Owner-only read. Lazily expires an overdue reservation so callers never see a stale `active`. */
 export async function getReservationForOwner(db: Database, actor: Actor, reservationId: string): Promise<ReservationView> {
+  assertUuid(reservationId, "Reservation");
   const [row] = await db
     .select({ reservation: reservations, overdue: sql<boolean>`${reservations.expiresAt} <= now()` })
     .from(reservations)
@@ -246,6 +254,7 @@ export async function getReservationForOwner(db: Database, actor: Actor, reserva
 
 /** The attendee gives up a hold. Idempotent for an already released reservation. */
 export async function releaseReservation(db: Database, actor: Actor, reservationId: string): Promise<ReservationView> {
+  assertUuid(reservationId, "Reservation");
   return db.transaction(async (tx) => {
     const reservation = await lockReservation(tx, reservationId, actor.userId);
     if (!reservation) throw new AppError("NOT_FOUND", "Reservation not found.");

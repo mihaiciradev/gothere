@@ -11,6 +11,8 @@
   --color-violet: #8264ff;
   /* AA-safe violet for text and filled controls on light surfaces (5.4:1 with white, 4.9:1 on off-white). */
   --color-violet-strong: #6a4cf0;
+  /* AA-safe violet for text on dark surfaces (6.1:1 on graphite-900, 6.5:1 on obsidian). */
+  --color-violet-soft: #9a84ff;
 
   --color-graphite-950: #0a0a0a;
   --color-graphite-900: #161616;
@@ -107,6 +109,82 @@
   ::selection {
     background: var(--color-lime);
     color: var(--color-obsidian);
+  }
+}
+
+/* --- Editorial primitives ------------------------------------------------------------------------ */
+
+/* Technical metadata: dates, venues, codes. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Hairline rules instead of boxes. */
+@utility hairline {
+  border-color: color-mix(in oklab, var(--surface-fg) 14%, transparent);
+}
+
+/* Legibility scrim over photography (functional, not decorative). */
+@utility scrim-bottom {
+  background-image: linear-gradient(to top, rgb(16 16 16 / 0.92) 0%, rgb(16 16 16 / 0.55) 38%, rgb(16 16 16 / 0) 72%);
+}
+@utility scrim-top {
+  background-image: linear-gradient(to bottom, rgb(16 16 16 / 0.7) 0%, rgb(16 16 16 / 0) 100%);
+}
+
+@utility container-edge {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 3rem);
+  max-width: 96rem;
+}
+
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@utility animate-marquee {
+  animation: marquee 48s linear infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@utility animate-live {
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+
+/* Hide scrollbars on horizontal rails while keeping them scrollable and keyboard accessible. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-live {
+    animation: none !important;
   }
 }
 

@@ -8,6 +8,7 @@ import type { Actor } from "@/modules/identity";
 import { enqueueJob } from "@/modules/operations";
 import { closeReservation, idempotencyKeySchema, lockReservation } from "@/modules/reservations";
 import { AppError } from "@/shared/errors";
+import { assertUuid } from "@/shared/ids";
 import { ingestProviderEvent } from "./processing";
 import {
   type PaymentProvider,
@@ -102,6 +103,7 @@ export async function startPayment(
   input: unknown,
   options: { idempotencyKey: unknown },
 ): Promise<PaymentAttemptView> {
+  assertUuid(reservationId, "Reservation");
   const { scenario } = startPaymentSchema.parse(input ?? {});
   if (scenario !== "success" && !deps.allowScenarios) {
     throw new AppError("FORBIDDEN", "Payment simulator scenarios are disabled in this environment.");

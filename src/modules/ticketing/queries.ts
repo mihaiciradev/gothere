@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { DbExecutor } from "@/infrastructure/db/client";
-import { events, experiences, inventoryItems, orders, tickets } from "@/infrastructure/db/schema";
+import { events, experiences, inventoryItems, orders, tickets, users } from "@/infrastructure/db/schema";
 import type { Actor } from "@/modules/identity";
 import { AppError } from "@/shared/errors";
+import { assertUuid } from "@/shared/ids";
 
 const ticketFields = {
   id: tickets.id,
@@ -12,8 +13,11 @@ const ticketFields = {
   orderId: tickets.orderId,
   itemName: inventoryItems.name,
   kind: inventoryItems.kind,
+  holderName: users.name,
   event: {
     id: events.id,
+    heroImageUrl: events.heroImageUrl,
+    heroImageCredit: events.heroImageCredit,
     slug: events.slug,
     title: events.title,
     venueName: events.venueName,
@@ -22,7 +26,9 @@ const ticketFields = {
     startsAt: events.startsAt,
     endsAt: events.endsAt,
   },
+  experienceTitle: experiences.title,
   experienceStartsAt: experiences.startsAt,
+  experienceEndsAt: experiences.endsAt,
   experienceLocation: experiences.location,
 };
 
@@ -32,6 +38,7 @@ function ticketQuery(db: DbExecutor) {
     .from(tickets)
     .innerJoin(inventoryItems, eq(inventoryItems.id, tickets.inventoryItemId))
     .innerJoin(events, eq(events.id, tickets.eventId))
+    .innerJoin(users, eq(users.id, tickets.userId))
     .leftJoin(experiences, eq(experiences.id, inventoryItems.experienceId));
 }
 
@@ -40,6 +47,7 @@ export function listTicketsForUser(db: DbExecutor, actor: Actor) {
 }
 
 export async function getTicketForUser(db: DbExecutor, actor: Actor, ticketId: string) {
+  assertUuid(ticketId, "Ticket");
   const [ticket] = await ticketQuery(db).where(and(eq(tickets.id, ticketId), eq(tickets.userId, actor.userId)));
   if (!ticket) throw new AppError("NOT_FOUND", "Ticket not found.");
   return ticket;
