@@ -9,6 +9,8 @@ const baseURL = `http://localhost:${port}`;
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
+  // One local server process shares a single connection pool; keep parallelism realistic.
+  workers: process.env.CI ? 2 : 4,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
@@ -22,7 +24,8 @@ export default defineConfig({
     url: `${baseURL}/api/auth/ok`,
     reuseExistingServer: !process.env.CI,
     // The auth origin must match the port the test server listens on.
-    env: { BETTER_AUTH_URL: baseURL },
+    // Test mode: no auth rate limiting across parallel journeys; simulator scenarios enabled.
+    env: { BETTER_AUTH_URL: baseURL, APP_ENV: "test", PAYMENT_SIMULATOR_SCENARIOS: "enabled", DATABASE_POOL_MAX: "10" },
     timeout: 120_000,
   },
 });
