@@ -9,11 +9,11 @@ import {
   organizations,
   users,
 } from "../src/infrastructure/db/schema";
-import { assertNonProduction, loadLocalEnv } from "./lib/env";
+import { assertNonProduction, assertTarget, loadScriptEnv } from "./lib/env";
 import { seedEvents, seedOrganizations, seedUsers } from "./seed-data";
 import { seedDemandSignals, seedPurchaseHistory } from "./seed-history";
 
-loadLocalEnv();
+const scriptEnv = loadScriptEnv();
 assertNonProduction("Seeding");
 
 function required(name: string, minLength = 1): string {
@@ -23,6 +23,7 @@ function required(name: string, minLength = 1): string {
 }
 
 const databaseUrl = required("DATABASE_URL");
+const target = assertTarget("Seeding", databaseUrl, scriptEnv);
 // Administrator accounts are created only where they cannot be reached publicly, unless explicitly allowed.
 const appEnv = process.env.APP_ENV ?? "local";
 const seedAdmin = appEnv === "local" || appEnv === "test" || process.env.SEED_ALLOW_ADMIN === "true";
@@ -177,6 +178,8 @@ async function main() {
     JSON.stringify({
       level: "info",
       msg: "seed complete",
+      target,
+      appEnv,
       users: userIds.size,
       organizations: orgIds.size,
       events: seedEvents.length,

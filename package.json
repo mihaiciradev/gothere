@@ -8,7 +8,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3005",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -24,6 +24,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "db:check-role": "tsx scripts/check-runtime-role.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm test:unit"
   },
   "dependencies": {

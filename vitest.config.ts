@@ -34,6 +34,10 @@ export default defineConfig({
             PAYMENT_WEBHOOK_SECRET: "test-webhook-secret-test-webhook-secret-0",
             PAYMENT_SIMULATOR_SCENARIOS: "enabled",
             LOG_LEVEL: "error",
+            // Never call a real AI provider from tests (overrides .env.local); AI paths use a scripted provider.
+            ANTHROPIC_API_KEY: "",
+            AI_MODEL_FAST: "",
+            AI_MONTHLY_BUDGET_MINOR: "",
           },
         },
       },

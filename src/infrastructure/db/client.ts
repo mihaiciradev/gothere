@@ -3,13 +3,24 @@ import { Pool } from "pg";
 import { serverEnv } from "../env";
 import * as schema from "./schema";
 
+/**
+ * Neon's pooler (PgBouncer, transaction mode) is addressed by an endpoint id ending in `-pooler`. Startup parameters
+ * it does not track may be rejected there, so on pooled connections the statement timeout comes from the role
+ * (`ALTER ROLE … SET statement_timeout`, scripts/sql/database-roles.sql) instead of the client.
+ */
+export function isPooledConnection(connectionString: string): boolean {
+  return /-pooler\./.test(new URL(connectionString).hostname);
+}
+
 function createDatabase(connectionString: string, max: number) {
   const pool = new Pool({
     connectionString,
     max,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 5_000,
-    statement_timeout: 10_000,
+    ...(isPooledConnection(connectionString) ? {} : { statement_timeout: 10_000 }),
+    // node-postgres ignores `channel_binding` in the URL; honour Neon's `channel_binding=require` explicitly.
+    enableChannelBinding: new URL(connectionString).searchParams.get("channel_binding") === "require",
     application_name: "gothere",
   });
   return { pool, db: drizzle(pool, { schema }) };

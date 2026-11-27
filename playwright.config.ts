@@ -25,7 +25,17 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     // The auth origin must match the port the test server listens on.
     // Test mode: no auth rate limiting across parallel journeys; simulator scenarios enabled.
-    env: { BETTER_AUTH_URL: baseURL, APP_ENV: "test", PAYMENT_SIMULATOR_SCENARIOS: "enabled", DATABASE_POOL_MAX: "10" },
+    // AI is always off in end-to-end runs (empty = unset, overriding .env.local): tests never spend provider
+    // credits and never depend on model latency. AI paths are covered by integration tests with a scripted provider.
+    env: {
+      BETTER_AUTH_URL: baseURL,
+      APP_ENV: "test",
+      PAYMENT_SIMULATOR_SCENARIOS: "enabled",
+      DATABASE_POOL_MAX: "10",
+      ANTHROPIC_API_KEY: "",
+      AI_MODEL_FAST: "",
+      AI_MONTHLY_BUDGET_MINOR: "",
+    },
     timeout: 120_000,
   },
 });

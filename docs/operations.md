@@ -45,7 +45,43 @@ Introduced later: `SENTRY_DSN` (M4).
 - Schema: `src/infrastructure/db/schema/*.ts`. Migrations: `drizzle/` (generated SQL, committed, never edited after being applied).
 - Change flow: edit schema → `pnpm db:generate --name <change>` → review SQL → `pnpm db:migrate` locally → commit both. CI runs `drizzle-kit check`.
 - Hand-written SQL (triggers, functions) goes in `drizzle-kit generate --custom` migrations.
-- Neon provisioning (approved in principle; credentials not yet provided): one project, `main` branch for production, a branch per preview. Before any public deployment apply `scripts/sql/database-roles.sql`: `gothere_migrator` (owns schema, runs migrations) and `gothere_app` (DML only, cannot alter audit records). Migrations run from CI or a trusted machine, never at request time.
+- Deployed databases (Neon): see [§ Neon setup](#neon-setup). Migrations run from CI or a trusted machine, never at request time.
+
+## Neon setup
+
+Rehearsed end to end on a Postgres 17 container mimicking Neon (non-superuser owner with CREATEROLE): roles SQL,
+migrations as the migrator, seed as the runtime role, role check, and the full Playwright suite running as the
+runtime role (42/42). The local Docker database is not involved.
+
+| Role | Created by | Connection | Used for |
+| --- | --- | --- | --- |
+| `neondb_owner` (Neon default) | Neon | SQL Editor | Step 1 only (create the two roles). Never used by the app. |
+| `gothere_migrator` | SQL, step 1 | **direct** (`ep-…`) | `pnpm db:migrate` from a trusted machine or CI. Owns every table. |
+| `gothere_app` | SQL, step 1 | **pooled** (`ep-…-pooler`) on Vercel; direct for seeding | Runtime: DML only. No DDL, no TRUNCATE, cannot rewrite `audit_records` or delete `action_requests`. |
+
+Create both roles **with SQL**: roles made in the Neon Console or API join `neon_superuser` (read/write on every
+table). Pooled connections are PgBouncer in transaction mode; the app uses only transaction-scoped advisory locks
+and protocol-level prepared statements, both supported. Startup parameters are not relied on through the pooler:
+the statement timeout is set on the role. Use `sslmode=verify-full&channel_binding=require` in every URL.
+
+1. **Roles** — Neon SQL Editor, database `neondb`, role `neondb_owner`: run `scripts/sql/database-roles.sql` with two
+   generated passwords (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`). The
+   final query must show `false` in every column.
+2. **Local Neon env file** — copy `.env.neon.example` to `.env.neon` (git-ignored) and fill it in: migrator direct
+   URL, app direct and pooled URLs, new `BETTER_AUTH_SECRET` and `PAYMENT_WEBHOOK_SECRET` (not the local ones),
+   the planned `BETTER_AUTH_URL`, `SEED_DEMO_PASSWORD`.
+3. **Migrate** — `pnpm db:migrate --env-file=.env.neon` (as `gothere_migrator`, direct; then re-grants `gothere_app`).
+4. **Seed** — `pnpm db:seed --env-file=.env.neon` (as `gothere_app`; idempotent; no admin in `preview`).
+5. **Verify** — `pnpm db:check-role --env-file=.env.neon` (direct and pooled; non-superuser, timeout set, data
+   readable/writable, DDL/TRUNCATE/audit rewrite denied). Must print `Role check passed.`
+6. **Vercel variables** — Production scope, mark secrets *Sensitive*: `DATABASE_URL` (app, **pooled**),
+   `DATABASE_POOL_MAX=5`, `APP_ENV=preview`, `LOG_LEVEL=info`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+   `PAYMENT_WEBHOOK_SECRET`, `CRON_SECRET`, optionally `PAYMENT_SIMULATOR_SCENARIOS` and the AI variables. Never on
+   Vercel: migrator credentials, `MIGRATION_DATABASE_URL`, `DATABASE_APP_ROLE`, `SEED_*`, `TEST_DATABASE_URL`.
+
+Scripts load only the file named by `--env-file=` (never `.env.local` as well) and refuse a non-local database
+unless its URL came from such a file. Every later migration: step 3 again. Local development is unchanged
+(`pnpm db:migrate`, `pnpm db:seed` use `.env.local`).
 
 ## Seed data
 
