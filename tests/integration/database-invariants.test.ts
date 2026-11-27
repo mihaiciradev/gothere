@@ -93,7 +93,7 @@ async function purchaseChain() {
   });
   const [attempt] = await db
     .insert(paymentAttempts)
-    .values({ reservationId: reservation!.id, idempotencyKey: crypto.randomUUID(), amountMinor: 5000, currency: "EUR" })
+    .values({ reservationId: reservation!.id, idempotencyKey: crypto.randomUUID(), requestHash: "test", amountMinor: 5000, currency: "EUR" })
     .returning();
   return { user, org, event, item, reservation: reservation!, attempt: attempt! };
 }
@@ -219,6 +219,7 @@ describe("payment invariants", () => {
       db.insert(paymentAttempts).values({
         reservationId: chain.reservation.id,
         idempotencyKey: crypto.randomUUID(),
+        requestHash: "test",
         amountMinor: 1,
         currency: "EUR",
         status: "failed",
@@ -233,7 +234,7 @@ describe("payment invariants", () => {
     await db.update(paymentAttempts).set({ status: "unknown" }).where(eq(paymentAttempts.id, chain.attempt.id));
     const [second] = await db
       .insert(paymentAttempts)
-      .values({ reservationId: chain.reservation.id, idempotencyKey: crypto.randomUUID(), amountMinor: 5000, currency: "EUR" })
+      .values({ reservationId: chain.reservation.id, idempotencyKey: crypto.randomUUID(), requestHash: "test", amountMinor: 5000, currency: "EUR" })
       .returning();
     await db.update(paymentAttempts).set({ status: "succeeded" }).where(eq(paymentAttempts.reservationId, chain.reservation.id));
 
@@ -251,6 +252,7 @@ describe("payment invariants", () => {
       db.insert(paymentAttempts).values({
         reservationId: chain.reservation.id,
         idempotencyKey: crypto.randomUUID(),
+        requestHash: "test",
         amountMinor: 5000,
         currency: "EUR",
       }),
@@ -265,9 +267,12 @@ describe("payment invariants", () => {
 
     await expectDbRejection(set({ disposition: "accepted" }), "payment_attempts_disposition_requires_success");
     await set({ status: "failed" });
-    await expectDbRejection(set({ status: "succeeded" }), "payment_attempts_status_transition");
     await expectDbRejection(set({ status: "pending" }), "payment_attempts_status_transition");
+    await expectDbRejection(set({ status: "unknown" }), "payment_attempts_status_transition");
+    await set({ status: "succeeded" }); // a provider success after a failure is always recordable
+    await expectDbRejection(set({ status: "failed" }), "payment_attempts_status_transition");
     await expectDbRejection(set({ amountMinor: 1 }), "payment_attempts_immutable");
+    await expectDbRejection(set({ requestHash: "tampered" }), "payment_attempts_immutable");
   });
 
   it("rejects disposition shortcuts", async () => {

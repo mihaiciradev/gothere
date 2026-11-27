@@ -31,6 +31,7 @@ What the provider says happened.
      │  │         │   └──► failed
      │  │         └──────► unknown ──► pending | succeeded | failed
      │  └──► succeeded | failed | unknown
+ failed ──► succeeded   (a genuine provider success after a failure)
 ```
 
 | Status | Meaning |
@@ -41,8 +42,11 @@ What the provider says happened.
 | succeeded | Provider took the money (simulated). Always recorded, never rolled back |
 | failed | Provider definitively did not take the money (decline, unavailable, not received) |
 
-`succeeded` and `failed` are terminal. A duplicate status is ignored; an out-of-order status (e.g. `pending` after
-`succeeded`) is ignored as stale. At most one attempt per reservation may be `initiated`/`pending` at once;
+`succeeded` is terminal. `failed` can only become `succeeded`: a provider success always wins, because money moved
+and must be accepted or refunded. A duplicate status is ignored; any other out-of-order status (e.g. `pending` after
+`succeeded`, `pending` after `failed`) is ignored as stale. Failures we inferred ourselves (`provider_unavailable`,
+`not_received_by_provider`) schedule a verification job that asks the provider later; reconciliation also checks
+failed attempts, so a hidden success is always found. At most one attempt per reservation may be `initiated`/`pending` at once;
 `unknown` does not block a retry (a retry can therefore produce a second provider success — handled below).
 
 ## Payment attempt — application decision (`disposition`)
@@ -93,6 +97,8 @@ Outcomes: `accepted`, `refund_required:{late_success|duplicate_success|amount_mi
 | Late success after expiry and resale | refund_required, no tickets, no oversell | `payments › a success after expiry and resale…` |
 | Expiry racing confirmation | exactly one consistent outcome | `payments › concurrent expiry and confirmation…` |
 | Crash between record and process | reconciliation processes the stored event | `payments › a recorded success whose processing never ran…` |
+| Success after a declined attempt | `failed → succeeded`; accepted if payable, else refunded | `payment-reconciliation › provider success after a failed attempt…` |
+| Success hidden behind a local failure | verification job finds it at the provider | `payment-reconciliation › … discovered by reconciliation…` |
 
 ## Background job
 

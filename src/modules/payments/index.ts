@@ -31,7 +31,14 @@ export {
   ProviderUnavailableError,
   simulatorScenarios,
 } from "./provider";
-export { type ReconcileResult, processSimulatedRefund, reconcileAttempt, reconcilePayments } from "./reconciliation";
+export {
+  type ReconcileResult,
+  type UnreconciledSuccess,
+  findUnreconciledProviderSuccesses,
+  processSimulatedRefund,
+  reconcileAttempt,
+  reconcilePayments,
+} from "./reconciliation";
 export {
   type PaymentAttemptView,
   type PaymentDeps,

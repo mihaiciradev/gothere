@@ -23,3 +23,12 @@ could vanish from our records while the customer was charged.
 + Duplicate tickets are impossible (one accepted attempt → one order → unique ticket ordinals).
 − Attendees can be charged twice in rare timeout+retry cases; this is visible and auto-refunded (simulated).
   A production provider would add idempotency keys on its side to reduce this further.
+
+## Amendment (pre-M2 review)
+
+A provider success after a `failed` attempt was ignored as stale, so money taken late (late capture, or a
+failure we inferred from a 503) could escape reconciliation. Now `failed → succeeded` is a valid transition (domain
+and trigger); locally inferred failures schedule a provider verification job; reconciliation queries failed attempts;
+and `findUnreconciledProviderSuccesses` lists any provider success not ending in accepted/refund_required/refunded
+(orphans, reference mismatches, unprocessed events). Payment Idempotency-Keys now store a request hash; reuse with
+different parameters returns 409.

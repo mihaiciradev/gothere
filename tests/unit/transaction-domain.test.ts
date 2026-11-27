@@ -14,10 +14,10 @@ import { generateTicketCode } from "@/modules/ticketing/confirmation";
 describe("payment attempt state machine", () => {
   const all: AttemptStatus[] = ["initiated", "pending", "succeeded", "failed", "unknown"];
 
-  it("treats succeeded and failed as terminal", () => {
+  it("treats succeeded as terminal and lets only a success follow a failure", () => {
     for (const to of all) {
       expect(canTransitionAttempt("succeeded", to)).toBe(false);
-      expect(canTransitionAttempt("failed", to)).toBe(false);
+      expect(canTransitionAttempt("failed", to)).toBe(to === "succeeded");
     }
   });
 
@@ -30,7 +30,8 @@ describe("payment attempt state machine", () => {
   it("absorbs duplicate and out-of-order notifications", () => {
     expect(interpretNotification("succeeded", "succeeded")).toEqual({ kind: "ignore", reason: "duplicate" });
     expect(interpretNotification("succeeded", "pending")).toEqual({ kind: "ignore", reason: "stale" });
-    expect(interpretNotification("failed", "succeeded")).toEqual({ kind: "ignore", reason: "stale" });
+    expect(interpretNotification("failed", "pending")).toEqual({ kind: "ignore", reason: "stale" });
+    expect(interpretNotification("failed", "succeeded")).toEqual({ kind: "apply", status: "succeeded" });
     expect(interpretNotification("pending", "succeeded")).toEqual({ kind: "apply", status: "succeeded" });
   });
 });

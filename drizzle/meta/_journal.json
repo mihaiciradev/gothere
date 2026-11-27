@@ -29,6 +29,13 @@
       "when": 1795795145157,
       "tag": "0003_state_machine_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795797209457,
+      "tag": "0004_payment_request_hash",
+      "breakpoints": true
     }
   ]
 }

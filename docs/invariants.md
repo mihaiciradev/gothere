@@ -32,13 +32,14 @@ Status: ✅ enforced and tested · ⏳ planned (milestone).
 | ID | Invariant | Enforcement | Test | Status |
 | --- | --- | --- | --- | --- |
 | PAY-1 | Payments are simulated | DB `payment_attempts_simulated_only`; responses carry `simulated: true` | `database-invariants › rejects non-simulated payments` | ✅ |
-| PAY-2 | Every provider success is recorded | Provider event recorded in its own transaction before processing; no uniqueness on `succeeded` | `payments › records every success…`, `… processing never ran … recovered` | ✅ |
+| PAY-2 | Every provider success is recorded and reconciled, including one that follows a failure | Provider event recorded before processing; `failed → succeeded` allowed; inferred failures verified with the provider; `findUnreconciledProviderSuccesses` report | `payments › records every success…`, `… processing never ran …`, `payment-reconciliation` (5 tests) | ✅ |
 | PAY-3 | At most one accepted payment per reservation | Partial unique index on `disposition = 'accepted'` | `database-invariants › records several provider successes but accepts at most one` | ✅ |
 | PAY-4 | Duplicate notifications have no extra effect | Event-id dedup + duplicate-status ignore | `payments › duplicate notifications…` | ✅ |
 | PAY-5 | Out-of-order notifications cannot regress state | Domain transition table + DB trigger | `payments › out-of-order…`, `database-invariants › invalid payment state transitions` | ✅ |
 | PAY-6 | No transaction across a provider call | Attempt committed → provider call → new transactions | Code structure (`payments/service.ts`) | ✅ |
 | PAY-7 | Late success never oversells or issues tickets | Accept only active + unexpired; otherwise `refund_required` | `payments › a success after expiry and resale…` | ✅ |
 | PAY-8 | Amount charged equals amount captured | Attempt amount copied from reservation; mismatching provider amount never accepted; amount immutable (trigger) | `payments › … different amount…`, `database-invariants › … edits to recorded amounts` | ✅ |
+| PAY-10 | Payment Idempotency-Keys are bound to their request | `(reservation, key)` unique + `request_hash` of reservation and scenario; mismatch → 409; hash immutable (trigger) | `payment-reconciliation › payment idempotency` | ✅ |
 | PAY-9 | Unauthenticated callers cannot confirm payments | HMAC signature + 5-minute window before parse/store; acceptance still requires a matching attempt | `payments › rejects unsigned, tampered and stale…`, `http-api › rejects unsigned…` | ✅ |
 
 ## Orders and tickets

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database, DbExecutor } from "@/infrastructure/db/client";
@@ -16,6 +17,25 @@ import {
 } from "./provider";
 
 export const RECONCILE_ATTEMPT_JOB = "payments.reconcile_attempt";
+
+/** Binds a payment Idempotency-Key to the parameters that shape the request (the amount is server-side). */
+function paymentRequestHash(reservationId: string, scenario: string): string {
+  return createHash("sha256").update(JSON.stringify({ reservationId, scenario })).digest("hex");
+}
+
+/**
+ * A failure we inferred ourselves (no definitive provider answer) is verified later: if the provider did
+ * take the money, the success is fed through normal processing and never lost.
+ */
+export function verifyFailureLater(tx: DbExecutor, attemptId: string) {
+  return enqueueJob(tx, {
+    type: RECONCILE_ATTEMPT_JOB,
+    payload: { attemptId },
+    delaySeconds: 60,
+    maxAttempts: 8,
+    dedupeKey: `verify:${attemptId}`,
+  });
+}
 
 export const startPaymentSchema = z
   .object({ scenario: z.enum(simulatorScenarios).default("success") })
@@ -87,6 +107,7 @@ export async function startPayment(
     throw new AppError("FORBIDDEN", "Payment simulator scenarios are disabled in this environment.");
   }
   const key = idempotencyKeySchema.parse(options.idempotencyKey);
+  const requestHash = paymentRequestHash(reservationId, scenario);
 
   const prepared = await db.transaction(async (tx) => {
     const reservation = await lockReservation(tx, reservationId, actor.userId);
@@ -96,7 +117,14 @@ export async function startPayment(
       .select()
       .from(paymentAttempts)
       .where(and(eq(paymentAttempts.reservationId, reservationId), eq(paymentAttempts.idempotencyKey, key)));
-    if (previous) return { kind: "replay" as const, attempt: previous };
+    if (previous) {
+      if (previous.requestHash !== requestHash) {
+        throw new AppError("CONFLICT", "This Idempotency-Key was already used for a different request.", {
+          reason: "idempotency_key_reused",
+        });
+      }
+      return { kind: "replay" as const, attempt: previous };
+    }
 
     if (reservation.status === "converted") {
       throw new AppError("CONFLICT", "This reservation has already been paid.", { reason: "already_paid" });
@@ -114,6 +142,7 @@ export async function startPayment(
       .values({
         reservationId,
         idempotencyKey: key,
+        requestHash,
         amountMinor: reservation.totalMinor,
         currency: reservation.currency,
         status: "initiated",
@@ -147,10 +176,14 @@ export async function startPayment(
     });
   } catch (error) {
     if (error instanceof ProviderUnavailableError) {
-      await db
-        .update(paymentAttempts)
-        .set({ status: "failed", failureCode: "provider_unavailable", completedAt: sql`now()` })
-        .where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, "initiated")));
+      await db.transaction(async (tx) => {
+        const failed = await tx
+          .update(paymentAttempts)
+          .set({ status: "failed", failureCode: "provider_unavailable", completedAt: sql`now()` })
+          .where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, "initiated")))
+          .returning({ id: paymentAttempts.id });
+        if (failed.length) await verifyFailureLater(tx, attempt.id);
+      });
     } else {
       if (!(error instanceof ProviderTimeoutError)) logger.error("unexpected provider error", { error, attemptId: attempt.id });
       await db.transaction(async (tx) => {

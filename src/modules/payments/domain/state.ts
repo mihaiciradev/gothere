@@ -7,14 +7,15 @@ export type ProviderStatus = "pending" | "succeeded" | "failed";
  *   initiated → pending | succeeded | failed | unknown
  *   pending   → succeeded | failed | unknown
  *   unknown   → pending | succeeded | failed
- *   succeeded, failed: terminal
+ *   failed    → succeeded   (a genuine provider success always wins: money moved, it must be accounted for)
+ *   succeeded: terminal     (a success is never undone; reversals would be refunds)
  */
 const attemptTransitions: Record<AttemptStatus, readonly AttemptStatus[]> = {
   initiated: ["pending", "succeeded", "failed", "unknown"],
   pending: ["succeeded", "failed", "unknown"],
   unknown: ["pending", "succeeded", "failed"],
+  failed: ["succeeded"],
   succeeded: [],
-  failed: [],
 };
 
 export function canTransitionAttempt(from: AttemptStatus, to: AttemptStatus): boolean {

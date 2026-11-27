@@ -115,6 +115,8 @@ export const paymentAttempts = pgTable(
     provider: paymentProvider("provider").notNull().default("simulator"),
     providerReference: text("provider_reference").unique(),
     idempotencyKey: text("idempotency_key").notNull(),
+    /** sha256 of the request parameters; reusing a key with different parameters is rejected. */
+    requestHash: text("request_hash").notNull(),
     status: paymentAttemptStatus("status").notNull().default("initiated"),
     disposition: paymentDisposition("disposition").notNull().default("none"),
     amountMinor: integer("amount_minor").notNull(),
