@@ -5,6 +5,7 @@ const valid = {
   DATABASE_URL: "postgres://u:p@127.0.0.1:5432/db",
   BETTER_AUTH_SECRET: "x".repeat(32),
   BETTER_AUTH_URL: "http://localhost:3000",
+  PAYMENT_WEBHOOK_SECRET: "w".repeat(32),
 };
 
 describe("server environment", () => {

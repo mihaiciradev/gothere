@@ -1,3 +1,5 @@
+import { currentCorrelationId } from "../request-context";
+
 type Level = "debug" | "info" | "warn" | "error";
 
 const order: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
@@ -41,6 +43,7 @@ export function createLogger(bindings: LogFields = {}): Logger {
       time: new Date().toISOString(),
       level,
       msg,
+      correlationId: currentCorrelationId(),
       ...(redact({ ...bindings, ...fields }) as LogFields),
     });
     if (level === "error" || level === "warn") console.error(line);

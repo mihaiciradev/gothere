@@ -31,10 +31,10 @@ module.exports = {
     },
     {
       name: "modules-not-presentation",
-      comment: "Business logic never depends on delivery (Next.js routes) or UI.",
+      comment: "Business logic never depends on delivery (Next.js routes), UI or the composition root.",
       severity: "error",
       from: { path: "^src/(modules|ai|actions|infrastructure|shared)/" },
-      to: { path: "^src/(app|components)/" },
+      to: { path: "^src/(app|components|composition)/" },
     },
     {
       name: "infrastructure-not-modules",
@@ -55,6 +55,12 @@ module.exports = {
       severity: "error",
       from: { path: "^src/components/" },
       to: { path: "^src/(infrastructure|ai|actions)/" },
+    },
+    {
+      name: "composition-uses-public-module-api",
+      severity: "error",
+      from: { path: "^src/composition/" },
+      to: { path: "^src/modules/[^/]+/.+", pathNot: "^src/modules/[^/]+/index\.ts$" },
     },
     {
       name: "app-uses-public-module-api",

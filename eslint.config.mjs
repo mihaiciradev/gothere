@@ -16,6 +16,11 @@ const eslintConfig = defineConfig([
     files: ["scripts/**", "src/infrastructure/logging/**"],
     rules: { "no-console": "off" },
   },
+  {
+    // Tests read untyped JSON responses and report measured concurrency outcomes.
+    files: ["tests/**"],
+    rules: { "@typescript-eslint/no-explicit-any": "off", "no-console": ["error", { allow: ["error", "info"] }] },
+  },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "drizzle/**", "playwright-report/**", "test-results/**", ".dependency-cruiser.cjs"]),
 ]);
 

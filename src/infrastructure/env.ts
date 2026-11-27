@@ -12,6 +12,13 @@ const serverEnvSchema = z.object({
 
   BETTER_AUTH_SECRET: secret,
   BETTER_AUTH_URL: z.url(),
+
+  /** Bearer secret for the job runner; Vercel Cron sends it automatically when set as CRON_SECRET. */
+  CRON_SECRET: secret.optional(),
+  /** HMAC key for payment provider (simulator) notifications. */
+  PAYMENT_WEBHOOK_SECRET: secret,
+  /** Non-default payment simulator scenarios are a demonstration control; off unless explicitly enabled. */
+  PAYMENT_SIMULATOR_SCENARIOS: z.enum(["enabled", "disabled"]).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -35,6 +42,11 @@ export function parseServerEnv(source: Record<string, string | undefined>): Serv
     throw new EnvValidationError(["BETTER_AUTH_URL: must use https in production"]);
   }
   return env;
+}
+
+/** Scenarios default to enabled only for local development and tests. */
+export function simulatorScenariosEnabled(env: ServerEnv): boolean {
+  return (env.PAYMENT_SIMULATOR_SCENARIOS ?? (env.APP_ENV === "local" || env.APP_ENV === "test" ? "enabled" : "disabled")) === "enabled";
 }
 
 let cached: ServerEnv | undefined;
