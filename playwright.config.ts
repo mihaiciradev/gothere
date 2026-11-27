@@ -1,4 +1,7 @@
+import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+
+if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 const port = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://localhost:${port}`;
@@ -18,6 +21,8 @@ export default defineConfig({
     command: `pnpm start -p ${port}`,
     url: `${baseURL}/api/auth/ok`,
     reuseExistingServer: !process.env.CI,
+    // The auth origin must match the port the test server listens on.
+    env: { BETTER_AUTH_URL: baseURL },
     timeout: 120_000,
   },
 });
