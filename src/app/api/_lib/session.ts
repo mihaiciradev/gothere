@@ -10,6 +10,8 @@ export const limits = {
   reservationCreate: { limit: 20, windowSeconds: 60 },
   paymentStart: { limit: 10, windowSeconds: 60 },
   organizerWrite: { limit: 60, windowSeconds: 60 },
+  demandWrite: { limit: 20, windowSeconds: 60 },
+  agentRun: { limit: 6, windowSeconds: 60 },
 } as const;
 
 export function limit(actor: Actor, bucket: keyof typeof limits): Promise<void> {

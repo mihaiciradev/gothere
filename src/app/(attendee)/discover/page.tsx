@@ -7,6 +7,8 @@ import { Photo } from "@/components/media/photo";
 import { AvailabilityTag } from "@/components/ui/availability-tag";
 import { getDb } from "@/infrastructure/db/client";
 import { type CatalogFilters, catalogFiltersSchema, getCatalogFacets, listPublishedEvents } from "@/modules/events";
+import { Concierge } from "../_components/concierge";
+import { DemandBeacon } from "../_components/demand-beacon";
 
 export const metadata: Metadata = { title: "Discover" };
 
@@ -24,6 +26,9 @@ export default function DiscoverPage({ searchParams }: { searchParams: SearchPar
           <SearchForm searchParams={searchParams} />
         </Suspense>
       </header>
+      <div className="pt-8">
+        <Concierge compact />
+      </div>
       <Suspense fallback={<ResultsSkeleton />}>
         <Results searchParams={searchParams} />
       </Suspense>
@@ -76,7 +81,7 @@ async function SearchForm({ searchParams }: { searchParams: SearchParams }) {
       </div>
       <p className="mt-3 flex items-center gap-2 text-xs text-graphite-400">
         <span aria-hidden className="size-1.5 bg-violet" />
-        Keyword search today. A conversational concierge arrives in the next release.
+        Keyword search. Or describe the night below and let the concierge look.
       </p>
     </form>
   );
@@ -167,9 +172,11 @@ async function Results({ searchParams }: { searchParams: SearchParams }) {
 
       {events.length === 0 ? (
         <div className="border-t hairline py-20">
+          {filters.q && <DemandBeacon kind="search" query={filters.q} />}
           <p className="font-display text-4xl font-semibold tracking-tight">Nothing matches that yet.</p>
           <p className="mt-4 max-w-md text-graphite-300">
-            Try a city, a kind of night or an experience — “jazz”, “Constanța”, “yoga”.
+            Try a city, a kind of night or an experience — “jazz”, “Constanța”, “yoga”. We note searches that find nothing so
+            organisers know what people are looking for.
           </p>
           <Link href="/discover" className="mt-8 inline-block label text-lime">
             See all events →

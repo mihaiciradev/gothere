@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 const secret = z.string().min(32, "must be at least 32 characters");
+/** Treats an empty value (`KEY=` in an env file) as unset. */
+const unsetIfEmpty = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" ? undefined : v), schema);
 
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -19,6 +21,23 @@ const serverEnvSchema = z.object({
   PAYMENT_WEBHOOK_SECRET: secret,
   /** Non-default payment simulator scenarios are a demonstration control; off unless explicitly enabled. */
   PAYMENT_SIMULATOR_SCENARIOS: z.enum(["enabled", "disabled"]).optional(),
+
+  /** Runtime AI. All optional: without a key, model and budget the app runs with deterministic fallbacks. */
+  ANTHROPIC_API_KEY: unsetIfEmpty(z.string().min(1).optional()),
+  /** Fast, low-cost model for routine inference (a Haiku-class id). Opus is rejected for runtime use. */
+  AI_MODEL_FAST: unsetIfEmpty(
+    z
+      .string()
+      .regex(/^[a-z0-9.-]+$/, "must be a model id")
+      .refine((id) => !id.includes("opus"), "Opus models are not allowed for routine runtime inference")
+      .optional(),
+  ),
+  /** Monthly ceiling in US cents. 0 or unset disables AI calls. */
+  AI_MONTHLY_BUDGET_MINOR: unsetIfEmpty(z.coerce.number().int().min(0).max(1_000_000).optional()),
+  /** Prices in micro-USD per million tokens; required for model ids without a built-in price. */
+  AI_INPUT_MICRO_USD_PER_MTOK: unsetIfEmpty(z.coerce.number().int().min(1).optional()),
+  AI_OUTPUT_MICRO_USD_PER_MTOK: unsetIfEmpty(z.coerce.number().int().min(1).optional()),
+  AI_TIMEOUT_MS: unsetIfEmpty(z.coerce.number().int().min(1000).max(60_000).default(12_000)),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

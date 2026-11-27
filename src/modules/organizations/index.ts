@@ -5,4 +5,4 @@ export {
   organizationRoles,
   roleGrants,
 } from "./domain/permissions";
-export { type OrganizationContext, requireOrganizationPermission } from "./authorization";
+export { type OrganizationContext, listMemberships, requireOrganizationPermission } from "./authorization";

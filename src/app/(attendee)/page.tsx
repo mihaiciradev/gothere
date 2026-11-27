@@ -8,7 +8,7 @@ import { RevealTitle } from "@/components/motion/reveal-title";
 import { AvailabilityTag } from "@/components/ui/availability-tag";
 import { getDb } from "@/infrastructure/db/client";
 import { getCatalogFacets, listPublishedEvents, listUpcomingExperiences } from "@/modules/events";
-import { ConciergeEntry } from "./_components/concierge-entry";
+import { Concierge } from "./_components/concierge";
 import { EventIndex } from "./_components/event-index";
 import { pickFeatured, titleLines, toIndexRow } from "./_lib/present";
 
@@ -187,7 +187,7 @@ async function HomeContent() {
         </ul>
       </section>
 
-      <ConciergeEntry />
+      <Concierge />
     </>
   );
 }

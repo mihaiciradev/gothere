@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../src/infrastructure/db/client";
-import { events, inventoryItems, orders, users } from "../src/infrastructure/db/schema";
+import { demandSignals, events, inventoryItems, orders, users } from "../src/infrastructure/db/schema";
+import { subjectKey } from "../src/modules/analytics";
 import type { Actor } from "../src/modules/identity";
 import { createSimulatorProvider, startPayment } from "../src/modules/payments";
 import { createReservation } from "../src/modules/reservations";
@@ -116,4 +117,47 @@ export async function seedPurchaseHistory(db: Database): Promise<{ orders: numbe
       UPDATE tickets SET issued_at = t.at FROM t WHERE tickets.reservation_id = ${reservation.id}`);
   }
   return { orders: created, skipped: false };
+}
+
+/**
+ * The measurable unmet-demand scenario: after Sunset Sessions sold out, 384 distinct people still wanted it
+ * (212 joined the waitlist, 300 viewed the sold-out session; 128 did both). Synthetic subjects have no accounts;
+ * subject keys are derived exactly as for live traffic. Stamped origin = 'seed'. Re-running is a no-op.
+ */
+export async function seedDemandSignals(db: Database, subjectSecret: string): Promise<{ signals: number; skipped: boolean }> {
+  const [event] = await db.select().from(events).where(eq(events.slug, EVENT_SLUG));
+  const [sunset] = await db
+    .select()
+    .from(inventoryItems)
+    .where(and(eq(inventoryItems.eventId, event!.id), eq(inventoryItems.name, "Sunset Sessions · Saturday")));
+  const [existing] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(demandSignals)
+    .where(and(eq(demandSignals.inventoryItemId, sunset!.id), eq(demandSignals.origin, "seed")));
+  if ((existing?.count ?? 0) > 0) return { signals: existing!.count, skipped: true };
+
+  const random = mulberry32(384);
+  const rows: (typeof demandSignals.$inferInsert)[] = [];
+  const at = (daysAgo: number) => {
+    const createdAt = new Date(Date.now() - daysAgo * 86_400_000 - Math.floor(random() * 36_000_000));
+    return { createdAt, occurredOn: createdAt.toISOString().slice(0, 10) };
+  };
+  for (let i = 0; i < 384; i++) {
+    const key = subjectKey({ visitorId: `seed-interest-${i}` }, subjectSecret);
+    const base = { organizationId: event!.organizationId, eventId: event!.id, inventoryItemId: sunset!.id, subjectKey: key, origin: "seed" as const };
+    if (i < 212) rows.push({ ...base, kind: "waitlist_request", ...at(1 + Math.floor(random() * 55)) });
+    if (i >= 84) rows.push({ ...base, kind: "sold_out_view", ...at(1 + Math.floor(random() * 58)) });
+  }
+  const searches: [string, number][] = [
+    ["silent disco", 41],
+    ["jazz brunch", 23],
+    ["kids workshop", 17],
+  ];
+  for (const [query, people] of searches) {
+    for (let i = 0; i < people; i++) {
+      rows.push({ kind: "search_unmatched", query, subjectKey: subjectKey({ visitorId: `seed-search-${query}-${i}` }, subjectSecret), origin: "seed", ...at(1 + Math.floor(random() * 40)) });
+    }
+  }
+  for (let i = 0; i < rows.length; i += 200) await db.insert(demandSignals).values(rows.slice(i, i + 200)).onConflictDoNothing();
+  return { signals: rows.length, skipped: false };
 }

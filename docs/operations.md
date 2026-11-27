@@ -28,7 +28,17 @@ Validated at first use by `src/infrastructure/env.ts` (Zod). Missing or invalid 
 | `SEED_DEMO_PASSWORD`, `SEED_ADMIN_PASSWORD` | seeding | Demo account passwords (≥ 12 / ≥ 16 chars); admin only for local/test |
 | `SEED_ALLOW_ADMIN` | optional | `true` to seed the admin account in preview (CTO decision) |
 
-Introduced later: `ANTHROPIC_API_KEY`, `AI_MODEL_FAST`, `AI_MONTHLY_BUDGET_MINOR` (M3); `SENTRY_DSN` (M4).
+| `ANTHROPIC_API_KEY` | optional | Server-only provider key |
+| `AI_MODEL_FAST` | optional | Runtime model id (Haiku-class); Opus rejected |
+| `AI_MONTHLY_BUDGET_MINOR` | optional | Monthly AI ceiling in US cents; unset/0 = AI off |
+| `AI_INPUT_MICRO_USD_PER_MTOK`, `AI_OUTPUT_MICRO_USD_PER_MTOK` | for unknown models | Prices; built in for `claude-haiku-5-5` and `claude-haiku-4-5` |
+| `AI_TIMEOUT_MS` | default 12000 | Per-call timeout; a whole agent run gets twice this |
+
+AI is enabled only when key, model, budget and a price are all known (`src/composition/ai.ts`); otherwise the
+concierge answers with deterministic search, the organiser agent runs as a fixed automation through the same
+governed actions, and briefs are rules text. The UI states which path answered. Spend is in `ai_usage_records`.
+
+Introduced later: `SENTRY_DSN` (M4).
 
 ## Database
 
@@ -39,9 +49,19 @@ Introduced later: `ANTHROPIC_API_KEY`, `AI_MODEL_FAST`, `AI_MONTHLY_BUDGET_MINOR
 
 ## Seed data
 
-`pnpm db:seed` (idempotent, refuses production) creates the fictional ecosystem from `scripts/seed-data.ts`: demo users (2 attendees, 3 organizer members across 2 tenants, 1 platform admin in local/test only), 2 organizations, 3 published events, 5 experiences, 10 inventory items. Demo users are created through Better Auth so passwords are hashed exactly as in production.
+`pnpm db:seed` (idempotent, refuses production) creates the fictional ecosystem from `scripts/seed-data.ts`: demo users (2 attendees, 3 organizer members across 2 tenants, 1 platform admin in local/test only), 2 organizations, 6 published events with their experiences and inventory. Demo users are created through Better Auth so passwords are hashed exactly as in production.
 
 Then `scripts/seed-history.ts` produces Halcyon Shore's sales history **through the real services** (`createReservation` → `startPayment` with the simulator): 240 synthetic buyers without credentials, 240 orders, every row stamped `origin = 'seed'`. Sunset Sessions ends at 150/150 (sold out) for the M3 unmet-demand workflow; Chef's Table at 36/40. Afterwards only timestamps are rewritten to spread history over the past ~12 weeks; counters, orders and tickets are exactly what the services produced. Re-running is a no-op. Anything created through the API is `origin = 'live'`.
+
+`seedDemandSignals` adds the unmet-demand scenario (M3): after Sunset Sessions sold out, 384 distinct people still
+wanted it (212 waitlist requests, 300 sold-out views, 128 both), plus three platform-level searches that found
+nothing. Subject keys use the same keyed hash as live traffic (`BETTER_AUTH_SECRET`), so analysis treats them alike;
+all rows are `origin = 'seed'`. Running the demand analysis on Tidal Assembly then proposes a second session: 150
+places at EUR 35, EUR 5,250 maximum gross.
+
+Demo walkthrough: sign in as the Tidal Assembly owner → `/organizer/intelligence` → *Run demand analysis* → *Let the
+agent prepare it* → `/organizer/approvals` → *Approve and publish* → the session is on sale on the event page and
+its live sales appear under the recommendation. The analyst account (Radu) can see everything but cannot act.
 
 ## Background jobs
 

@@ -1,60 +1,79 @@
 # Business Action Registry
 
-> Status: **design** (implementation in M3). This file is the contract the implementation must meet.
+> Status: **implemented in M3** (`src/actions/`). Decisions: [ADR-0009](adr/0009-business-action-registry.md),
+> AI side: [ADR-0008](adr/0008-ai-gateway.md), analysis: [ADR-0010](adr/0010-grounded-demand-analysis.md).
 
-Every business capability that an AI agent may use is a registered action. Humans, HTTP APIs and AI tools invoke the same action through the same executor, so authorization, validation, idempotency and audit are identical whichever interface calls it.
+Every business capability an agent may use is a registered action. Humans, HTTP APIs and AI tools invoke it
+through the same executor, so validation, authorization, idempotency and audit are identical.
 
-## Action definition
+## Action definition (`src/actions/types.ts`)
 
 ```ts
-type ActionDefinition<I, O> = {
-  id: string;                         // stable, e.g. "experience.create_draft"
-  description: string;                // shown to the model and to approvers
-  input: ZodType<I>;                  // validated before anything else
-  output: ZodType<O>;
-  permission: OrganizationPermission; // checked via requireOrganizationPermission
+type ActionDefinition<Input, Params, Output> = {
+  id: string; title: string; description: string;   // description is shown to the model and to approvers
+  input: ZodType<Input>;                              // what a caller may supply (strict)
+  params: ZodType<Params>;                            // canonical stored parameters after binding
   risk: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  approval: "none" | "required_when_ai_initiated" | "always";
-  preconditions(ctx, input): Promise<void>;   // business rules, re-run at execution
-  idempotency: "natural" | "key";             // how duplicates are absorbed
-  limits: { perMinute: number; perDay?: number };
-  execute(ctx, input): Promise<O>;            // calls module services, never SQL
+  scope: "public" | "organization";
+  permission?: OrganizationPermission;
+  approval: "none" | "when_not_human" | "always";
+  limits: { perMinute: number };
+  idempotency: string;                                // contract, enforced by the implementation
+  bind?(ctx, input): Promise<Params>;                 // e.g. snapshot the draft being published
+  preconditions?(ctx, params): Promise<void>;         // run before requesting approval and before executing
+  execute(ctx, params): Promise<Output>;              // calls module services, never SQL
+  describe?(params): string;                          // one line for the approval inbox
 };
 ```
 
-## Initial actions
+## Registered actions
 
-| Id | Risk | Permission | Approval |
-| --- | --- | --- | --- |
-| `events.search` | LOW | public | none |
-| `experiences.read_availability` | LOW | public | none |
-| `analytics.read` | LOW | `analytics.read` | none |
-| `demand.analyze` | LOW | `recommendation.read` | none |
-| `experience.create_draft` | MEDIUM | `experience.write` | none (draft is private) |
-| `experience.publish` | HIGH | `experience.publish` | required when AI-initiated |
-| `incident.investigate` | HIGH | platform admin | always (spends external credits) |
+| Id | Risk | Scope / permission | Approval | Idempotency |
+| --- | --- | --- | --- | --- |
+| `events.search` | LOW | public | none | read-only |
+| `experiences.read_availability` | LOW | public | none | read-only |
+| `analytics.read` | LOW | `analytics.read` | none | read-only |
+| `demand.analyze` | LOW | `recommendation.read` | none | one recommendation per sold-out session; re-run refreshes open ones |
+| `experience.create_draft` | MEDIUM | `experience.write` | none (private draft) | one draft per recommendation; repeat returns it |
+| `experience.publish` | HIGH | `experience.publish` | when initiated by an agent or automation | unique open request per parameters; executes once |
 
-CRITICAL (refunds, deleting events, changing payouts) is not exposed to AI at all in the MVP.
+CRITICAL actions (refunds, deleting events, payouts) are not registered; the executor refuses CRITICAL for
+non-human initiators anyway. `incident.investigate` arrives with M4.
 
-## Execution pipeline
+## Execution pipeline (`invokeAction`)
 
-1. Resolve the actor from the session (AI acts **as** the invoking user, never with more rights).
-2. Validate input with the action's schema.
-3. `requireOrganizationPermission(actor, organizationId, action.permission)` — tenant id comes from the server-side context, not from the model.
-4. Run preconditions.
-5. If approval is required: create `action_request` with canonical parameters and `params_hash = sha256(canonical JSON)`, status `pending_approval`, expiry; stop.
-6. Execute inside a transaction with an audit record (`actor_type = ai_agent | user`, correlation id).
+1. Resolve the action (unknown → `NOT_FOUND`). Policy: CRITICAL never for `ai_agent` / `automation`.
+2. Validate input (strict: unknown keys such as an `organizationId` from a model are rejected).
+3. Organization scope: actor required; `requireOrganizationPermission(actor, ctx.organizationId, permission)`. The
+   tenant comes from server context (route, approval record), never from input. Resources referenced by id are
+   pinned to that tenant (`NOT_FOUND` otherwise).
+4. Rate limit per action and actor (or anonymous subject hash).
+5. Bind canonical params; run preconditions.
+6. Approval required → `action_requests` row (`pending_approval`, hash, 24 h expiry) and return
+   `{ status: "pending_approval" }`. Otherwise execute; services audit inside their transaction with
+   `actor_type = user | ai_agent | system` and the initiator.
+7. FORBIDDEN / NOT_FOUND / UNAUTHENTICATED / RATE_LIMITED on organization actions are audited as `denied`.
 
-## Approvals
+## Approvals (`src/actions/approvals.ts`)
 
-- Bound to `(action_id, organization_id, params_hash)`. The approver sees exactly those parameters.
-- Approving records approver identity and time. The approver must independently hold the action's permission.
-- Execution re-validates permission and preconditions, compares the stored hash, and atomically flips `approved → executed` (`UPDATE … WHERE status = 'approved'`): a replay finds 0 rows.
-- Approvals expire (default 24 h). Expired or rejected requests cannot execute.
-- Only a human user holding the permission can approve; an AI agent never can. Human-initiated actions of the same risk do not need approval, because the human is already the accountable decision-maker.
+- Bound to `(action_id, organization_id, params_hash)`; the inbox shows the exact params (for publication: title,
+  start in event time, places, price) and the hash.
+- Deciding requires `action.approve` and the action's own permission; the request must be pending and unexpired;
+  the submitted hash must equal the stored hash, which must still be the hash of the stored params.
+- Approval executes in one transaction: `UPDATE … SET status='executed' WHERE status='approved' AND expires_at >
+  now()` plus the effect. A replay or concurrent call updates 0 rows → `CONFLICT`. Requester and approver
+  permissions and preconditions are re-checked; a business failure rolls back and marks the request `failed`.
+- The database forbids changing params, hash, requester, initiator, risk or decision, backward transitions and
+  deletes (`drizzle/0007_action_request_guards.sql`).
+- An AI agent has no approve tool and cannot obtain one: decisions are only reachable from an authenticated human
+  route.
 
 ## Model boundary
 
-- The model receives tool definitions generated from the registry (id, description, input JSON schema) for actions the current actor is allowed to call.
-- Tool results are data. Untrusted text (descriptions, messages) is delimited and never interpreted as instructions.
-- Numeric claims in recommendations must cite query results returned by `analytics.read` / `demand.analyze`.
+- Tool definitions are generated from the registry (`src/ai/action-tools.ts`: name with `_`, description, JSON
+  schema of `input`). Each tool call goes through `invokeAction` with the caller's actor and server-side tenant.
+- Concierge: only `events_search` and `experiences_read_availability`. Picks are filtered to slugs the tools
+  returned; cards are rendered from the database; money or multi-digit numbers in model prose are replaced.
+- Organiser agent: only `experience_create_draft` and `experience_publish` (which yields `pending_approval`).
+- Attendee messages and recommendation facts are wrapped in tags and declared untrusted data in the system prompt.
+- Recommendation briefs are stored only if every number they cite belongs to the recommendation (ADR-0010).

@@ -43,6 +43,20 @@
       "when": 1795797469902,
       "tag": "0005_event_presentation",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795815874765,
+      "tag": "0006_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795815876174,
+      "tag": "0007_action_request_guards",
+      "breakpoints": true
     }
   ]
 }

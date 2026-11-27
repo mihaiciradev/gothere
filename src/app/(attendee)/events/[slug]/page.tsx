@@ -7,10 +7,14 @@ import { Photo } from "@/components/media/photo";
 import { ParallaxMedia } from "@/components/motion/parallax-media";
 import { RevealTitle } from "@/components/motion/reveal-title";
 import { AvailabilityTag } from "@/components/ui/availability-tag";
+import { demandSubjectSecret } from "@/composition/ai";
 import { getDb } from "@/infrastructure/db/client";
+import { isOnWaitlist } from "@/modules/analytics";
 import { type CatalogItem, type PublishedEvent, getPublishedEvent } from "@/modules/events";
 import { isAppError } from "@/shared/errors";
+import { DemandBeacon } from "../../_components/demand-beacon";
 import { titleLines } from "../../_lib/present";
+import { currentActor } from "../../_lib/session";
 import { type PanelGroup, type PanelItem, TicketPanel } from "./ticket-panel";
 
 type Params = Promise<{ slug: string }>;
@@ -78,7 +82,11 @@ async function EventContent({ params, searchParams }: { params: Params; searchPa
       ),
     },
   ];
-  const initialSelection = parseSelection((await searchParams).select, groups.flatMap((g) => g.items));
+  const allItems = groups.flatMap((g) => g.items);
+  const initialSelection = parseSelection((await searchParams).select, allItems);
+  const soldOutIds = allItems.filter((i) => i.soldOut).map((i) => i.id);
+  const actor = soldOutIds.length ? await currentActor() : null;
+  const waitlisted = actor ? [...(await isOnWaitlist(getDb(), actor, soldOutIds, { subjectSecret: demandSubjectSecret() }))] : [];
 
   const days = new Map<string, PublishedEvent["experiences"]>();
   for (const exp of event.experiences) {
@@ -88,6 +96,7 @@ async function EventContent({ params, searchParams }: { params: Params; searchPa
 
   return (
     <article>
+      {soldOutIds.length > 0 && <DemandBeacon kind="sold_out" inventoryItemIds={soldOutIds} />}
       <header className="relative flex min-h-[88svh] flex-col justify-end overflow-hidden">
         <ParallaxMedia>
           <Photo src={event.heroImageUrl} alt="" sizes="100vw" priority fill creditPosition="none" />
@@ -138,6 +147,7 @@ async function EventContent({ params, searchParams }: { params: Params; searchPa
               key={JSON.stringify(initialSelection)}
               eventId={event.id}
               eventSlug={event.slug}
+              waitlisted={waitlisted}
               groups={groups}
               initialSelection={initialSelection}
             />

@@ -14,7 +14,7 @@ src/
 │   ├── domain/       Pure rules and types. No I/O, no frameworks.
 │   ├── *.ts          Application services: authorization, transactions, orchestration.
 │   └── index.ts      The module's public API. The only file other code may import.
-├── actions/          Business Action Registry: typed, permissioned, auditable actions.  (M3)
+├── actions/          Business Action Registry: typed, permissioned, auditable actions, approvals. (M3)
 ├── ai/               AI Gateway and prompts. Calls actions, never the database.          (M3)
 ├── infrastructure/   Adapters: env, db (schema, client, migrations, error mapping), auth, logging, request context.
 └── shared/           Dependency-free primitives: errors, money.
@@ -50,8 +50,16 @@ Schema tables live in `src/infrastructure/db/schema/` grouped by bounded context
 | `reservations` | M1 | Idempotent creation, per-user cap, expiry (exactly once), release, owner-only reads. | reservations, reservation_items |
 | `payments` | M1 | Payment start, provider event recording and processing, acceptance policy, reconciliation, simulated refunds, provider simulator, webhook verification. | payment_attempts, payment_provider_events, simulator_payments (simulator only) |
 | `ticketing` | M1 | Order confirmation and idempotent ticket issuance; owner-only order and ticket reads. | orders, tickets |
-| `operations` | M1 | Durable job queue (claim, lease, fence, retry), database rate limiter. Incidents and AI usage in M4. | jobs, api_rate_limits |
-| `analytics` | M3 | Sales and demand read models, demand signals. | demand_signals |
+| `operations` | M1 | Durable job queue (claim, lease, fence, retry), database rate limiter, AI usage ledger (M3). Incidents in M4. | jobs, api_rate_limits, ai_usage_records |
+| `analytics` | M3 | Demand signals (keyed-hash subjects), sales and per-item insights (live vs seed), deterministic unmet-demand analysis, recommendations, grounded briefs, outcome attribution. | demand_signals, commercial_recommendations |
+
+Outside `modules/` (M3):
+
+| Layer | Responsibility | Writes |
+| --- | --- | --- |
+| `actions/` | Business Action Registry, `invokeAction` executor, approval requests and decisions ([ai-actions.md](ai-actions.md), [ADR-0009](adr/0009-business-action-registry.md)). Calls module services only. | action_requests |
+| `ai/` | AI Gateway (budget, timeouts, tool loop, usage), Anthropic adapter, concierge, organiser agent and briefs, deterministic intent parser ([ADR-0008](adr/0008-ai-gateway.md)). Uses actions as tools; never the database directly except the usage ledger via `operations`. | — |
+| `composition/ai.ts` | Builds the gateway from env; AI off unless key, model, budget and price are set. | — |
 
 Planned modules appear only when a milestone needs them; no empty folders.
 
@@ -68,7 +76,10 @@ User ─< Reservation ─< ReservationItem >── InventoryItem          (same 
 AuditRecord (append-only, references by id only)   Job (durable queue)   SimulatorPayment (provider stand-in)
 ```
 
-Planned (M3–M4): DemandSignal, CommercialRecommendation, BusinessActionRequest, ActionApproval, Incident, AiUsageRecord. Their contracts are in [ai-actions.md](ai-actions.md) and [operations.md](operations.md).
+M3 adds, per tenant: DemandSignal (→ event, item; search signals are platform-level), CommercialRecommendation
+(→ event, source item, created experience), ActionRequest (approval: params, hash, decision, outcome), and the
+platform-level AiUsageRecord. Composite foreign keys pin demand signals and recommendations to their event's tenant.
+Planned (M4): Incident.
 
 **Tenancy.** Every tenant-owned row carries `organization_id`. Child rows reference `(event_id, organization_id)` through a composite foreign key to `events(id, organization_id)`, so the database rejects a row whose tenant differs from its parent's. Attendee-owned rows (reservations, orders, tickets) also carry `user_id`; services filter by it. Below the event, composite keys chain every relationship: reservation lines share `event_id` with both their reservation and their inventory item; orders match their reservation on `(id, user_id, event_id)` and their payment attempt on `(id, reservation_id)`; tickets match their order on `(id, reservation_id, user_id, event_id)` and a reservation line on `(reservation_id, inventory_item_id)`. A cross-event or cross-tenant reference is a foreign-key violation.
 
@@ -147,6 +158,24 @@ identical server/client markup. GSAP was not added: Motion covers the sequences 
 would add weight without a visible gain.
 
 **Imagery.** Unsplash URLs resized by their CDN via a custom `next/image` loader; sources in [assets.md](assets.md).
+
+## Organizer interface (M3)
+
+```text
+src/app/organizer/
+├── layout.tsx                 light "organizer" surface, section nav (keeps ?org=), skip link
+├── page.tsx                   /organizer   live vs seeded revenue, opportunities, pending approvals, events table
+├── events/[eventId]/          per-item inventory, sales (live/seed) and unmet demand; recommendation links
+├── intelligence/              run analysis; recommendation cards: evidence, proposal, assumptions, risks, brief
+│                              (rules or AI, numbers verified), delegate/dismiss, drafted state, actual outcome
+├── approvals/                 inbox with exact params + hash, approve/reject, history, decision outcome banner
+├── _lib/context.ts            actor + membership from the DB; ?org= only selects among the person's memberships
+└── _components/               presentational primitives, client action buttons (call the API routes)
+```
+
+Attendee additions: the concierge (`_components/concierge.tsx`) on home and Discover, "Notify me" on sold-out items,
+and demand beacons that report sold-out views and empty searches after the page is shown. All mutations go through
+`/api/*`; pages read through the same permission-checked services.
 
 ## Design system
 

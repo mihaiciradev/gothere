@@ -1,8 +1,8 @@
 # Project state
 
-Last updated: 2026-11-27 · Current milestone: **M2 complete — awaiting independent review**. Do not start M3 until the review is closed.
+Last updated: 2026-11-28 · Current milestone: **M3 complete — awaiting independent review**. Do not start M4 until the review is closed.
 
-Review packages: [reports/m0-report.md](reports/m0-report.md) · [reports/m1-report.md](reports/m1-report.md) · [reports/m2-report.md](reports/m2-report.md).
+Review packages: [reports/m0-report.md](reports/m0-report.md) · [reports/m1-report.md](reports/m1-report.md) · [reports/m2-report.md](reports/m2-report.md) · [reports/m3-report.md](reports/m3-report.md).
 
 ## Milestones
 
@@ -10,35 +10,37 @@ Review packages: [reports/m0-report.md](reports/m0-report.md) · [reports/m1-rep
 | --- | --- |
 | M0 Architecture and foundation | ✅ Done (conditionally approved) |
 | M1 Transactional ticketing engine | ✅ Done (conditionally approved) |
-| M2 Attendee experience | ✅ Done (pending review) |
-| M3 AI and organizer intelligence | ⏳ Next |
-| M4 Engineering intelligence | — |
+| M2 Attendee experience | ✅ Done |
+| M3 AI and organizer intelligence | ✅ Done (pending review) |
+| M4 Engineering intelligence | ⏳ Next |
 | M5 Verification and release | — |
 
-## M2 delivered
+## M3 delivered
 
-- Pre-M2 review fixes: provider success after a failed attempt is reconciled (accepted or refunded), inferred failures are verified with the provider, unreconciled-success report; payment Idempotency-Keys bound to request parameters.
-- Attendee interface: home, discover, event detail with ticket selection, sign-in/up with safe redirects and selection carried through sign-in, checkout (simulated payment, countdown from DB clock, failure/retry, pending, expired, refund notices), wallet and ticket pass with server-rendered QR; designed 404 and error states.
-- Content: six fictional events across two organisers with licensed photography and credits ([assets.md](assets.md)); catalogue search, facets and availability status in the `events` module.
-- Quality: 124 Vitest tests, 36 Playwright tests on desktop and mobile including axe accessibility scans; screenshots in `docs/reports/m2/`.
+- Demand signals (waitlist, sold-out views, unmatched searches) with keyed-hash subjects; seeded Sunset Sessions scenario (384 interested).
+- Organizer interface: overview, event insights, intelligence (recommendations with evidence, proposal, assumptions, risks, outcome), approvals.
+- Deterministic unmet-demand analysis; grounded briefs; outcome attribution from live orders.
+- Business Action Registry with one executor for UI, API and AI; parameter-bound, single-use, expiring approvals (trigger-guarded).
+- AI Gateway (Anthropic adapter, budget, timeouts, usage ledger), concierge and organiser agent, each with a deterministic fallback.
+- Quality: 166 Vitest tests (40 unit, 126 integration), 42 Playwright tests on desktop and mobile including axe.
 
 ## Known limitations
 
-- No organizer or Control Center UI yet (M3/M4). Concierge and living ticket are honest placeholders.
-- Waitlist / "notify me" for sold-out sessions is a labelled slot only; demand capture arrives with M3.
+- Runtime AI is not connected (no credentials); fallbacks are live and labelled. See the M3 report §9.
+- No Control Center UI yet (M4). Living ticket is a placeholder.
+- Waitlist does not send notifications (no email provider).
+- Organizer screens cover intelligence and approvals; event and inventory editing are API-only.
 - Imagery is hotlinked from Unsplash (R-17). No CSP yet (R-02, M5).
-- No email verification, password reset or social sign-in.
-- QR codes are display-only; no check-in.
+- No email verification, password reset or social sign-in. QR codes are display-only.
 - Not deployed.
 
-## Next actions (M3 — AI and organizer intelligence, after review)
+## Next actions (M4 — engineering intelligence, after review)
 
-1. Demand signals: capture searches with no/low results, sold-out views and waitlist requests (the sold-out slot on the event page).
-2. AI Gateway (Anthropic SDK, Haiku via env, budgets, timeouts, usage records) and the concierge on `/discover` using registry actions only.
-3. Business Action Registry with approvals bound to parameter hashes; `experience.create_draft` and `experience.publish` as the flagship flow.
-4. Organizer dashboard (`/organizer`): sales, unmet demand for Sunset Sessions, recommendation with evidence and revenue assumptions, approval inbox.
-5. Attribution of sales to recommendation-created experiences.
+1. Structured operational events and incident records (fingerprint dedupe, severity P0–P3, correlation ids, technical and commercial impact).
+2. Control Center (`/control`): health, incidents and timeline, transactions, AI usage and cost (`ai_usage_records` exists), audit.
+3. Sanitized diagnostic reports and AI-assisted analysis through a registered `incident.investigate` action (approval always).
+4. Optional external agent investigation only with explicit authorization; otherwise label generated packages as not executed.
 
 ## Open decisions for the CTO
 
-See [reports/m2-report.md §11](reports/m2-report.md#11-decisions-requested).
+See [reports/m3-report.md §9](reports/m3-report.md#9-decisions-requested).

@@ -111,3 +111,26 @@ Outcomes: `accepted`, `refund_required:{late_success|duplicate_success|amount_mi
 
 Claiming is `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`. Completion and failure are fenced by
 `locked_by`, so a worker that lost its lease cannot overwrite the new owner's result.
+
+## Action request (approval)
+
+```text
+ pending_approval ──approve (human, hash match)──► approved ──execute (same transaction)──► executed
+        │                                              │ └──business failure (effect rolled back)──► failed
+        ├──reject──► rejected                          └──expires_at passed──► expired
+        └──expires_at passed──► expired
+```
+
+Guarded by the `action_requests_guard` trigger: only these forward transitions; params, hash, requester,
+initiator, risk and decision are immutable; rows cannot be deleted. Execution is
+`UPDATE … SET status = 'executed' WHERE status = 'approved' AND expires_at > now()` inside the effect's
+transaction, so a replay or a concurrent call updates nothing.
+
+## Commercial recommendation
+
+```text
+ open ──experience.create_draft──► drafted ──experience.publish executed──► published
+   └──dismiss──► dismissed
+```
+
+Re-analysis refreshes only `open` recommendations (numbers replaced, brief reset to the rules text).

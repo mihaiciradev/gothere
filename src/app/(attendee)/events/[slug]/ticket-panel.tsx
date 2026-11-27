@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
+import { WaitlistButton } from "./waitlist-button";
 
 export type PanelItem = {
   id: string;
@@ -45,10 +46,13 @@ export function TicketPanel({
   eventSlug,
   groups,
   initialSelection,
+  waitlisted = [],
 }: {
   eventId: string;
   eventSlug: string;
   groups: PanelGroup[];
+  /** Sold-out items the signed-in attendee already asked to be notified about. */
+  waitlisted?: string[];
   /** Selection carried through sign-in, already validated against live availability on the server. */
   initialSelection: Record<string, number>;
 }) {
@@ -162,12 +166,13 @@ export function TicketPanel({
 
                     <div className="mt-3 flex min-h-10 items-center justify-between gap-4">
                       {item.soldOut ? (
-                        <p className="text-sm text-graphite-300">
-                          <span className="label text-graphite-400">Sold out</span>
-                          <span className="mt-1 block text-xs text-graphite-400">
-                            Waitlist opens soon — demand for sold-out sessions helps organisers add more.
-                          </span>
-                        </p>
+                        <>
+                          <p className="text-sm text-graphite-300">
+                            <span className="label text-graphite-400">Sold out</span>
+                            <span className="mt-1 block text-xs text-graphite-400">Demand for sold-out sessions helps organisers add more.</span>
+                          </p>
+                          <WaitlistButton inventoryItemId={item.id} itemName={item.name} eventSlug={eventSlug} initiallyJoined={waitlisted.includes(item.id)} />
+                        </>
                       ) : !item.onSale ? (
                         <span className="label text-graphite-400">Not on sale</span>
                       ) : (

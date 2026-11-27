@@ -14,3 +14,4 @@ export {
   runDueJobs,
 } from "./jobs";
 export { consumeRateLimit } from "./rate-limit";
+export { type AiUsageEntry, aiSpendThisMonth, recentAiUsage, recordAiUsage } from "./ai-usage";

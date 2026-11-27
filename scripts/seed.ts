@@ -11,7 +11,7 @@ import {
 } from "../src/infrastructure/db/schema";
 import { assertNonProduction, loadLocalEnv } from "./lib/env";
 import { seedEvents, seedOrganizations, seedUsers } from "./seed-data";
-import { seedPurchaseHistory } from "./seed-history";
+import { seedDemandSignals, seedPurchaseHistory } from "./seed-history";
 
 loadLocalEnv();
 assertNonProduction("Seeding");
@@ -171,6 +171,7 @@ async function main() {
   }
 
   const history = await seedPurchaseHistory(db);
+  const demand = await seedDemandSignals(db, required("BETTER_AUTH_SECRET", 32));
 
   console.log(
     JSON.stringify({
@@ -182,6 +183,7 @@ async function main() {
       adminSeeded: seedAdmin,
       seedOrders: history.orders,
       historySkipped: history.skipped,
+      seedDemandSignals: demand.signals,
     }),
   );
 }

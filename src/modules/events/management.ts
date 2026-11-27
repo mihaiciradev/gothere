@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { Database } from "@/infrastructure/db/client";
+import type { Database, DbExecutor } from "@/infrastructure/db/client";
 import { isUniqueViolation } from "@/infrastructure/db/errors";
 import { events, experiences, inventoryItems } from "@/infrastructure/db/schema";
 import { recordAudit } from "@/modules/audit";
@@ -11,16 +11,28 @@ import { assertUuid } from "@/shared/ids";
 import { assertEventTransition, assertExperienceTransition, canHostPublishedExperience } from "./domain/lifecycle";
 import { createEventSchema, createExperienceSchema, updateEventSchema } from "./schemas";
 
-function audit(actor: Actor, organizationId: string, action: string, targetType: string, targetId: string, metadata = {}) {
+/** Who the change is attributed to. Actions invoked by an AI agent or automation still act with a user's rights. */
+export type AuditAttribution = { actorType?: "user" | "ai_agent" | "system"; correlationId?: string; metadata?: Record<string, unknown> };
+
+function audit(
+  actor: Actor,
+  organizationId: string,
+  action: string,
+  targetType: string,
+  targetId: string,
+  metadata: Record<string, unknown> = {},
+  attribution: AuditAttribution = {},
+) {
   return {
-    actorType: "user" as const,
+    actorType: attribution.actorType ?? ("user" as const),
+    correlationId: attribution.correlationId,
     actorUserId: actor.userId,
     organizationId,
     action,
     targetType,
     targetId,
     outcome: "succeeded" as const,
-    metadata,
+    metadata: { ...metadata, ...attribution.metadata },
   };
 }
 
@@ -80,18 +92,20 @@ export async function updateEvent(db: Database, actor: Actor, eventId: string, i
 }
 
 export async function createExperience(
-  db: Database,
+  db: DbExecutor,
   actor: Actor,
   eventId: string,
   input: unknown,
-  options: { origin?: "manual" | "ai_recommendation" } = {},
+  options: { origin?: "manual" | "ai_recommendation"; organizationId?: string; audit?: AuditAttribution } = {},
 ) {
   assertUuid(eventId, "Event");
   const data = createExperienceSchema.parse(input);
   try {
     return await db.transaction(async (tx) => {
       const [event] = await tx.select().from(events).where(eq(events.id, eventId)).for("share");
-      if (!event) throw new AppError("NOT_FOUND", "Event not found.");
+      if (!event || (options.organizationId && event.organizationId !== options.organizationId)) {
+        throw new AppError("NOT_FOUND", "Event not found.");
+      }
       await requireOrganizationPermission(tx, actor, event.organizationId, "experience.write");
       if (data.startsAt < event.startsAt || data.endsAt > event.endsAt) {
         throw new AppError("VALIDATION_FAILED", "The experience must take place during the event.");
@@ -131,7 +145,7 @@ export async function createExperience(
           capacity: data.capacity,
           priceMinor: data.priceMinor,
           origin: options.origin ?? "manual",
-        }),
+        }, options.audit),
       );
       return { experience: experience!, inventoryItem };
     });
@@ -142,11 +156,18 @@ export async function createExperience(
 }
 
 /** Publishes the experience and puts its draft inventory on sale, atomically. */
-export async function publishExperience(db: Database, actor: Actor, experienceId: string) {
+export async function publishExperience(
+  db: DbExecutor,
+  actor: Actor,
+  experienceId: string,
+  options: { organizationId?: string; audit?: AuditAttribution } = {},
+) {
   assertUuid(experienceId, "Experience");
   return db.transaction(async (tx) => {
     const [experience] = await tx.select().from(experiences).where(eq(experiences.id, experienceId)).for("update");
-    if (!experience) throw new AppError("NOT_FOUND", "Experience not found.");
+    if (!experience || (options.organizationId && experience.organizationId !== options.organizationId)) {
+      throw new AppError("NOT_FOUND", "Experience not found.");
+    }
     await requireOrganizationPermission(tx, actor, experience.organizationId, "experience.publish");
     assertExperienceTransition(experience.status, "published");
 
@@ -164,7 +185,27 @@ export async function publishExperience(db: Database, actor: Actor, experienceId
       .update(inventoryItems)
       .set({ status: "on_sale" })
       .where(and(eq(inventoryItems.experienceId, experienceId), eq(inventoryItems.status, "draft")));
-    await recordAudit(tx, audit(actor, experience.organizationId, "experience.publish", "experience", experienceId));
+    await recordAudit(tx, audit(actor, experience.organizationId, "experience.publish", "experience", experienceId, {}, options.audit));
     return published!;
   });
+}
+
+/** An experience with its sellable item, for an organization's members. `organizationId` pins the tenant. */
+export async function getExperienceForOrganization(
+  db: DbExecutor,
+  actor: Actor,
+  experienceId: string,
+  options: { organizationId: string; permission?: "event.read" | "experience.write" | "experience.publish" },
+) {
+  assertUuid(experienceId, "Experience");
+  const [row] = await db
+    .select({ experience: experiences, item: inventoryItems, timeZone: events.timeZone })
+    .from(experiences)
+    .innerJoin(events, eq(events.id, experiences.eventId))
+    .leftJoin(inventoryItems, eq(inventoryItems.experienceId, experiences.id))
+    .where(eq(experiences.id, experienceId))
+    .limit(1);
+  if (!row || row.experience.organizationId !== options.organizationId) throw new AppError("NOT_FOUND", "Experience not found.");
+  await requireOrganizationPermission(db, actor, row.experience.organizationId, options.permission ?? "event.read");
+  return row;
 }

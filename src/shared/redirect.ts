@@ -1,9 +1,9 @@
-const ALLOWED_SECTIONS = ["/discover", "/events", "/checkout", "/tickets"];
+const ALLOWED_SECTIONS = ["/discover", "/events", "/checkout", "/tickets", "/organizer"];
 
 /**
  * Returns a same-origin relative path that is safe to redirect to after sign-in, or the fallback.
  * Rejects absolute and protocol-relative URLs (`//evil`), backslash tricks (`/\evil`), control characters,
- * and any path outside the attendee sections.
+ * and any path outside the attendee and organizer sections.
  */
 export function safeRedirectPath(candidate: unknown, fallback = "/"): string {
   if (typeof candidate !== "string" || candidate.length === 0 || candidate.length > 512) return fallback;

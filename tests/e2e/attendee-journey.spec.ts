@@ -132,16 +132,18 @@ test.describe("attendee journey", () => {
     await expect(page).toHaveURL(/\/sign-in\?next=%2Ftickets/);
   });
 
-  test("the AI concierge is clearly not live and search works without it", async ({ page }) => {
-    const aiRequests: string[] = [];
-    page.on("request", (r) => /anthropic|openai|\/api\/ai/i.test(r.url()) && aiRequests.push(r.url()));
+  test("the browser never talks to an AI provider, and keyword search works without the concierge", async ({ page }) => {
+    const providerRequests: string[] = [];
+    page.on("request", (r) => /anthropic|openai/i.test(r.url()) && providerRequests.push(r.url()));
 
     await page.goto("/");
-    await expect(page.getByText("Concierge · arriving in the next release")).toBeVisible();
-    await page.locator("#concierge-q").fill("sunset");
-    await page.getByRole("button", { name: "Search now" }).click();
-    await expect(page).toHaveURL(/\/discover\?q=sunset/);
-    await expect(page.getByRole("link", { name: /Halcyon Shore 2027/ })).toBeVisible();
-    expect(aiRequests).toEqual([]);
+    await page.waitForLoadState("networkidle");
+    await page.getByLabel(/Describe what you’re looking for/).fill("sunset");
+    await page.getByRole("button", { name: "Ask" }).click();
+    await expect(page.getByText(/Plain search · no AI involved|AI picks from live listings/)).toBeVisible();
+
+    await page.goto("/discover?q=sunset");
+    await expect(page.getByRole("link", { name: /Halcyon Shore 2027/ }).first()).toBeVisible();
+    expect(providerRequests).toEqual([]);
   });
 });

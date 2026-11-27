@@ -22,7 +22,15 @@ export {
   assertEventTransition,
   assertExperienceTransition,
 } from "./domain/lifecycle";
-export { createEvent, createExperience, listOrganizationEvents, publishExperience, updateEvent } from "./management";
+export {
+  type AuditAttribution,
+  createEvent,
+  createExperience,
+  getExperienceForOrganization,
+  listOrganizationEvents,
+  publishExperience,
+  updateEvent,
+} from "./management";
 export {
   type CreateEventInput,
   type CreateExperienceInput,

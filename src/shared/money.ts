@@ -47,3 +47,9 @@ export function formatMoney(value: Money, locale = "en-IE"): string {
     maximumFractionDigits: digits,
   }).format(major);
 }
+
+/** Compact display ("EUR 35", "EUR 35.50") for currencies not known at compile time, e.g. stored parameters. */
+export function formatMinor(amountMinor: number, currency: string): string {
+  const major = amountMinor / 100;
+  return `${currency} ${major.toLocaleString("en-GB", { minimumFractionDigits: Number.isInteger(major) ? 0 : 2, maximumFractionDigits: 2 })}`;
+}

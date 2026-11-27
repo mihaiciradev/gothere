@@ -71,12 +71,16 @@ Status: ✅ enforced and tested · ⏳ planned (milestone).
 | JOB-3 | Retries are bounded | `max_attempts`, backoff, `dead` | `jobs › retries failures…`, `… buries a job…` | ✅ |
 | JOB-4 | Jobs commit with their business change | Enqueue inside the transaction | `jobs › enqueued jobs roll back…` | ✅ |
 
-## AI and actions (M3)
+## AI, actions and demand (M3)
 
-| ID | Invariant | Status |
-| --- | --- | --- |
-| ACT-1 | Every action passes the same authorization as a human request; the model never chooses its permissions | ⏳ M3 |
-| ACT-2 | HIGH-risk AI actions require an approval bound to a hash of canonical parameters | ⏳ M3 |
-| ACT-3 | Approvals execute at most once, expire, and are revalidated at execution | ⏳ M3 |
-| ACT-4 | AI is never on the critical purchase path | ✅ by construction (no AI code in M1); ⏳ test in M3 |
-| ACT-5 | AI figures reference application data; estimates separate from actual revenue | ⏳ M3 |
+| ID | Invariant | Enforcement | Test | Status |
+| --- | --- | --- | --- | --- |
+| ACT-1 | Every action passes the same authorization as a human request; the model never chooses its permissions or tenant | `invokeAction`: DB membership check, tenant from server context, referenced resources pinned to it, strict input | `governed-actions › rejects actions from non-members…`, `… pins resources to the context tenant`, `… rejects unknown keys…` | ✅ |
+| ACT-2 | HIGH-risk actions from an agent or automation wait for a human approval bound to a hash of canonical parameters | `approval: when_not_human`; `action_requests.params_hash`; the approver submits the hash they reviewed | `… holds publication for a human`, `… rejects an approval for parameters other than the ones reviewed` | ✅ |
+| ACT-3 | Approvals execute at most once, expire, and are re-validated (requester and approver permissions, preconditions) at execution | Conditional `approved → executed` in the effect's transaction; trigger-guarded immutability; expiry | `… exactly once under concurrent execution`, `… expires requests…`, `… re-checks the requester's permission…`, `… refuses to publish a draft that changed…`, `… makes stored parameters immutable…` | ✅ |
+| ACT-4 | AI is never on the critical purchase path | No AI code in reservations or payments; the concierge holds read-only tools | `ai-gateway › falls back to deterministic search when the provider fails, and ticketing is unaffected` | ✅ |
+| ACT-5 | Recommendation figures come from application data; estimates are separate from actual revenue | Pure `proposeAdditionalSession`; briefs stored only if every number is grounded; outcomes from live orders only | unit `intelligence`, `ai-gateway › keeps the rules narrative when…` | ✅ |
+| ACT-6 | Concierge picks exist in the catalogue and show database prices | Picks filtered to tool-returned slugs; cards hydrated from the DB; money in model prose replaced | `ai-gateway › only recommends what its tools returned…` | ✅ |
+| ACT-7 | AI spend stops at the monthly budget | Ledger checked before every provider call | `ai-gateway › stops calling the provider once the monthly budget is spent` | ✅ |
+| DEM-1 | A person counts once per item (waitlist) or per item and day (views, searches); identities are not stored as subjects | Keyed-hash subjects; partial unique indexes | `demand-signals › …` | ✅ |
+| DEM-2 | Demand signals belong to the tenant of their event | Composite foreign keys | `demand-signals › rejects a signal whose event belongs to a different tenant…` | ✅ |

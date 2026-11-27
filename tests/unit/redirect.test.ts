@@ -6,6 +6,7 @@ describe("safe redirect after sign-in", () => {
     expect(safeRedirectPath("/events/halcyon-shore-2027?ticket=1")).toBe("/events/halcyon-shore-2027?ticket=1");
     expect(safeRedirectPath("/checkout/abc")).toBe("/checkout/abc");
     expect(safeRedirectPath("/tickets")).toBe("/tickets");
+    expect(safeRedirectPath("/organizer/approvals?org=tidal-assembly")).toBe("/organizer/approvals?org=tidal-assembly");
     expect(safeRedirectPath("/")).toBe("/");
   });
 
@@ -21,7 +22,8 @@ describe("safe redirect after sign-in", () => {
       "/events/\nx",
       "javascript:alert(1)",
       "/api/auth/sign-out",
-      "/organizer",
+      "/control",
+      "/organizerevil",
       "/ticketsevil",
       "",
       null,
