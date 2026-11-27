@@ -6,7 +6,7 @@ Operating guide for any coding agent (Claude Code, Cursor, Codex) or engineer wo
 
 1. `docs/project-state.md` — current milestone, what is done, what is next. **Start here.**
 2. `docs/architecture.md` — module map, dependency rules, domain model.
-3. `docs/invariants.md` — rules that must never break. Any change touching inventory, reservations, payments, orders, tickets or approvals must keep these green.
+3. `docs/invariants.md` and `docs/state-machines.md` — rules that must never break. Any change touching inventory, reservations, payments, orders, tickets or approvals must keep these green.
 4. `docs/security.md` — threat model and risk register.
 5. `docs/adr/` — decisions already made. Do not silently reverse them; propose a new ADR.
 
@@ -20,6 +20,7 @@ Operating guide for any coding agent (Claude Code, Cursor, Codex) or engineer wo
 | Dev server | `pnpm dev` |
 | Fast gate (types, lint, boundaries, unit) | `pnpm check` |
 | Integration tests (real Postgres, resets `*_test` DB) | `pnpm test:integration` |
+| Run background jobs once (local) | `curl -X POST -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/operations/run` |
 | End-to-end tests | `pnpm build && pnpm test:e2e` |
 | New migration after schema change | `pnpm db:generate --name <change>` |
 
@@ -33,6 +34,9 @@ Runtime: Node 24 (`.node-version`), pnpm via Corepack (`packageManager` in `pack
 - Money is integer minor units plus currency (`src/shared/money.ts`). Never floats.
 - Instants are UTC (`timestamptz`); presentation uses the event's IANA `time_zone`.
 - No database transaction may stay open across a network call (payment provider, AI provider).
+- Lock order is provider event → reservation → payment attempt → inventory rows by id. Time decisions use the database clock.
+- Only `inventory` mutates capacity counters; only `closeReservation` leaves the `active` state.
+- Configuration and cross-module job wiring live in `src/composition/`; modules never import it.
 - Schema changes go through Drizzle migrations in `drizzle/`. Never edit an applied migration.
 - Payments are simulated. The database rejects non-simulated payment attempts.
 - Never commit secrets. `.env.local` is git-ignored; `.env.example` documents every variable.

@@ -47,6 +47,8 @@ CI runs all of the above on every push and pull request (`.github/workflows/ci.y
 | [docs/product.md](docs/product.md) | Product pillars and scope |
 | [docs/architecture.md](docs/architecture.md) | Modules, boundaries, domain model, design system |
 | [docs/invariants.md](docs/invariants.md) | Business invariants and how each is enforced |
+| [docs/state-machines.md](docs/state-machines.md) | Reservation, payment and job state machines |
+| [docs/api.md](docs/api.md) | HTTP API |
 | [docs/security.md](docs/security.md) | Threat model and risk register |
 | [docs/ai-actions.md](docs/ai-actions.md) | Business Action Registry and approvals |
 | [docs/operations.md](docs/operations.md) | Environments, configuration, migrations, jobs |
