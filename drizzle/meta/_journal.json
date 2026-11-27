@@ -36,6 +36,13 @@
       "when": 1795797209457,
       "tag": "0004_payment_request_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795797469902,
+      "tag": "0005_event_presentation",
+      "breakpoints": true
     }
   ]
 }

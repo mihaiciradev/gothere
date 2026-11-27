@@ -7,6 +7,7 @@ import type { Actor } from "@/modules/identity";
 import { createInventoryItem } from "@/modules/inventory";
 import { requireOrganizationPermission } from "@/modules/organizations";
 import { AppError } from "@/shared/errors";
+import { assertUuid } from "@/shared/ids";
 import { assertEventTransition, assertExperienceTransition, canHostPublishedExperience } from "./domain/lifecycle";
 import { createEventSchema, createExperienceSchema, updateEventSchema } from "./schemas";
 
@@ -24,6 +25,7 @@ function audit(actor: Actor, organizationId: string, action: string, targetType:
 }
 
 export async function listOrganizationEvents(db: Database, actor: Actor, organizationId: string) {
+  assertUuid(organizationId, "Organization");
   await requireOrganizationPermission(db, actor, organizationId, "event.read");
   return db
     .select({
@@ -44,6 +46,7 @@ export async function listOrganizationEvents(db: Database, actor: Actor, organiz
 }
 
 export async function createEvent(db: Database, actor: Actor, organizationId: string, input: unknown) {
+  assertUuid(organizationId, "Organization");
   const data = createEventSchema.parse(input);
   try {
     return await db.transaction(async (tx) => {
@@ -62,6 +65,7 @@ export async function createEvent(db: Database, actor: Actor, organizationId: st
 }
 
 export async function updateEvent(db: Database, actor: Actor, eventId: string, input: unknown) {
+  assertUuid(eventId, "Event");
   const patch = updateEventSchema.parse(input);
   return db.transaction(async (tx) => {
     const [event] = await tx.select().from(events).where(eq(events.id, eventId)).for("update");
@@ -82,6 +86,7 @@ export async function createExperience(
   input: unknown,
   options: { origin?: "manual" | "ai_recommendation" } = {},
 ) {
+  assertUuid(eventId, "Event");
   const data = createExperienceSchema.parse(input);
   try {
     return await db.transaction(async (tx) => {
@@ -138,6 +143,7 @@ export async function createExperience(
 
 /** Publishes the experience and puts its draft inventory on sale, atomically. */
 export async function publishExperience(db: Database, actor: Actor, experienceId: string) {
+  assertUuid(experienceId, "Experience");
   return db.transaction(async (tx) => {
     const [experience] = await tx.select().from(experiences).where(eq(experiences.id, experienceId)).for("update");
     if (!experience) throw new AppError("NOT_FOUND", "Experience not found.");

@@ -1,4 +1,4 @@
-export { type ItemAvailability, getEventAvailability } from "./availability";
+export { type ItemAvailability, getAvailabilityForEvents, getEventAvailability } from "./availability";
 export { type Counters, availableUnits } from "./domain/availability";
 export {
   type InventoryPatch,

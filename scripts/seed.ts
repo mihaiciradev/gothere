@@ -87,8 +87,22 @@ async function main() {
         startsAt: new Date(event.startsAt),
         endsAt: new Date(event.endsAt),
         status: "published",
+        category: event.category,
+        heroImageUrl: event.heroImageUrl,
+        heroImageCredit: event.heroImageCredit,
       })
-      .onConflictDoNothing();
+      // Re-seeding refreshes presentation only; ownership, schedule, status and inventory are left untouched.
+      .onConflictDoUpdate({
+        target: events.slug,
+        set: {
+          title: event.title,
+          summary: event.summary,
+          description: event.description,
+          category: event.category,
+          heroImageUrl: event.heroImageUrl,
+          heroImageCredit: event.heroImageCredit,
+        },
+      });
     const [eventRow] = await db.select({ id: events.id }).from(events).where(eq(events.slug, event.slug));
     const eventId = eventRow!.id;
 
@@ -100,7 +114,10 @@ async function main() {
         .select({ id: inventoryItems.id })
         .from(inventoryItems)
         .where(and(eq(inventoryItems.eventId, eventId), eq(inventoryItems.name, item.name)));
-      if (found) return;
+      if (found) {
+        if (item.description) await db.update(inventoryItems).set({ description: item.description }).where(eq(inventoryItems.id, found.id));
+        return;
+      }
       await db.insert(inventoryItems).values({
         organizationId,
         eventId,
@@ -129,12 +146,22 @@ async function main() {
           description: experience.description,
           category: experience.category,
           location: experience.location,
+          imageUrl: experience.imageUrl,
+          imageCredit: experience.imageCredit,
           startsAt: new Date(experience.startsAt),
           endsAt: new Date(experience.endsAt),
           status: "published",
           publishedAt: new Date(),
         })
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          target: [experiences.eventId, experiences.slug],
+          set: {
+            title: experience.title,
+            description: experience.description,
+            imageUrl: experience.imageUrl,
+            imageCredit: experience.imageCredit,
+          },
+        });
       const [experienceRow] = await db
         .select({ id: experiences.id })
         .from(experiences)

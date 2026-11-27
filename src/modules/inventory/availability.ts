@@ -1,10 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "@/infrastructure/db/client";
 import { inventoryItems } from "@/infrastructure/db/schema";
 import { availableUnits } from "./domain/availability";
 
 export type ItemAvailability = Readonly<{
   inventoryItemId: string;
+  eventId: string;
   capacity: number;
   sold: number;
   available: number;
@@ -14,10 +15,12 @@ export type ItemAvailability = Readonly<{
  * Read-only availability that is correct even if the expiry job is late: units held by active
  * reservations whose expiry has passed are counted as available, because no payment can confirm them.
  */
-export async function getEventAvailability(db: DbExecutor, eventId: string): Promise<Map<string, ItemAvailability>> {
+export async function getAvailabilityForEvents(db: DbExecutor, eventIds: readonly string[]): Promise<Map<string, ItemAvailability>> {
+  if (eventIds.length === 0) return new Map();
   const rows = await db
     .select({
       id: inventoryItems.id,
+      eventId: inventoryItems.eventId,
       capacity: inventoryItems.capacity,
       reserved: inventoryItems.reserved,
       sold: inventoryItems.sold,
@@ -28,12 +31,16 @@ export async function getEventAvailability(db: DbExecutor, eventId: string): Pro
       ), 0)`,
     })
     .from(inventoryItems)
-    .where(eq(inventoryItems.eventId, eventId));
+    .where(inArray(inventoryItems.eventId, [...eventIds]));
 
   return new Map(
     rows.map((r) => [
       r.id,
-      { inventoryItemId: r.id, capacity: r.capacity, sold: r.sold, available: availableUnits(r) },
+      { inventoryItemId: r.id, eventId: r.eventId, capacity: r.capacity, sold: r.sold, available: availableUnits(r) },
     ]),
   );
+}
+
+export function getEventAvailability(db: DbExecutor, eventId: string): Promise<Map<string, ItemAvailability>> {
+  return getAvailabilityForEvents(db, [eventId]);
 }

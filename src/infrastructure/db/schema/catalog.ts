@@ -21,6 +21,7 @@ export const experienceStatus = pgEnum("experience_status", ["draft", "published
 export const experienceOrigin = pgEnum("experience_origin", ["manual", "ai_recommendation"]);
 export const inventoryKind = pgEnum("inventory_kind", ["admission", "experience"]);
 export const inventoryStatus = pgEnum("inventory_status", ["draft", "on_sale", "paused", "closed"]);
+export const eventCategory = pgEnum("event_category", ["festival", "concert", "club", "culture"]);
 
 const slugCheck = (name: string, column: AnyPgColumn) => check(name, sql`${column} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`);
 
@@ -43,7 +44,10 @@ export const events = pgTable(
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     status: eventStatus("status").notNull().default("draft"),
+    category: eventCategory("category").notNull().default("festival"),
     heroImageUrl: text("hero_image_url"),
+    /** Attribution for licensed imagery, e.g. "Photo: Jane Doe / Unsplash". */
+    heroImageCredit: text("hero_image_credit"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -54,6 +58,7 @@ export const events = pgTable(
     unique("events_id_org_unique").on(t.id, t.organizationId),
     index("events_org_idx").on(t.organizationId),
     index("events_status_starts_idx").on(t.status, t.startsAt),
+    check("events_hero_image_https", sql`${t.heroImageUrl} IS NULL OR ${t.heroImageUrl} LIKE 'https://%'`),
     slugCheck("events_slug_format", t.slug),
     check("events_time_order", sql`${t.endsAt} > ${t.startsAt}`),
   ],
@@ -70,6 +75,8 @@ export const experiences = pgTable(
     description: text("description").notNull(),
     category: text("category").notNull(),
     location: text("location"),
+    imageUrl: text("image_url"),
+    imageCredit: text("image_credit"),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     status: experienceStatus("status").notNull().default("draft"),
