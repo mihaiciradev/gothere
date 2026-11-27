@@ -16,11 +16,11 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_URL: z.url(),
 
   /** Bearer secret for the job runner; Vercel Cron sends it automatically when set as CRON_SECRET. */
-  CRON_SECRET: secret.optional(),
+  CRON_SECRET: unsetIfEmpty(secret.optional()),
   /** HMAC key for payment provider (simulator) notifications. */
   PAYMENT_WEBHOOK_SECRET: secret,
   /** Non-default payment simulator scenarios are a demonstration control; off unless explicitly enabled. */
-  PAYMENT_SIMULATOR_SCENARIOS: z.enum(["enabled", "disabled"]).optional(),
+  PAYMENT_SIMULATOR_SCENARIOS: unsetIfEmpty(z.enum(["enabled", "disabled"]).optional()),
 
   /** Runtime AI. All optional: without a key, model and budget the app runs with deterministic fallbacks. */
   ANTHROPIC_API_KEY: unsetIfEmpty(z.string().min(1).optional()),

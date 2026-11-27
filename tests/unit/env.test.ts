@@ -28,6 +28,17 @@ describe("server environment", () => {
     }
   });
 
+  it("treats empty optional variables (KEY= copied from .env.example) as unset", () => {
+    const empty = Object.fromEntries(
+      ["CRON_SECRET", "PAYMENT_SIMULATOR_SCENARIOS", "ANTHROPIC_API_KEY", "AI_MODEL_FAST", "AI_MONTHLY_BUDGET_MINOR", "AI_INPUT_MICRO_USD_PER_MTOK", "AI_OUTPUT_MICRO_USD_PER_MTOK", "AI_TIMEOUT_MS"].map((k) => [k, ""]),
+    );
+    const env = parseServerEnv({ ...valid, ...empty });
+    expect(env.CRON_SECRET).toBeUndefined();
+    expect(env.PAYMENT_SIMULATOR_SCENARIOS).toBeUndefined();
+    expect(env.AI_MODEL_FAST).toBeUndefined();
+    expect(env.AI_TIMEOUT_MS).toBe(12_000);
+  });
+
   it("requires https for the auth URL in production", () => {
     expect(() => parseServerEnv({ ...valid, APP_ENV: "production" })).toThrow(/https/);
     expect(parseServerEnv({ ...valid, APP_ENV: "production", BETTER_AUTH_URL: "https://gothere.ro" }).APP_ENV).toBe(
