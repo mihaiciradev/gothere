@@ -42,13 +42,15 @@ Boundaries: browser â†” Next.js server (session cookie, origin checks); server â
 | Scripts | Migrations and seeds refuse `APP_ENV=production`; the admin demo account is seeded only for local/test unless `SEED_ALLOW_ADMIN=true`; synthetic seed buyers have no credentials; integration tests refuse any DB that is not local and `*_test`. |
 | Database roles | `scripts/sql/database-roles.sql`: migrator (DDL) and app (DML only, no audit mutation, no truncate); validated locally. |
 | Supply chain | Lockfile committed; install scripts allow-listed (`pnpm-workspace.yaml`); `pnpm audit --prod --audit-level high` in CI. |
+| Attendee UI (M2) | Post-sign-in redirects pass `safeRedirectPath` (same-origin, attendee sections only, no `//`, backslashes or control characters; unit-tested). Selections carried through sign-in (`?select=`) are re-validated server-side against live availability. Malformed ids return 404 before reaching SQL (`assertUuid`). Pages read data through the same owner-checked services as the API; client components never hold prices that matter. QR codes are generated server-side from the ticket code and labelled display-only. Errors show generic copy; details stay in logs. |
+| Reconciliation (pre-M2) | Provider success after a failed attempt is accepted or refunded (never ignored); inferred failures are verified with the provider; `findUnreconciledProviderSuccesses` lists anything unaccounted for. Payment Idempotency-Keys are bound to a request hash. |
 
 ## Risk register
 
 | ID | Risk | Severity | Status / mitigation |
 | --- | --- | --- | --- |
 | R-01 | No email verification: anyone can register any email address | Medium | Accepted for prototype (no email provider). Demo accounts use `.test`. Enable verification before real users. |
-| R-02 | No Content-Security-Policy yet | Medium | Planned M5 with nonces once UI and third-party scripts are known. React escaping is the current XSS defence. |
+| R-02 | No Content-Security-Policy yet | Medium | Now that the UI exists the inputs are known: self, Unsplash images, no third-party scripts. Nonce-based CSP planned for M5. React escaping and server-rendered QR (data URI, no innerHTML) are the current defences. |
 | R-03 | Reservation hoarding by bots | Medium (was High) | **Mitigated in M1**: atomic per-user cap, `max_per_order`, 10-minute holds, per-user rate limits. Residual: many accounts (no email verification, R-01). Production: WAF, bot management, waiting room, verified accounts. |
 | R-04 | Prompt injection via event content or attendee messages | High | M3: untrusted content delimited as data; tools are registry actions with server-side authorization; HIGH-risk actions need human approval bound to parameters. |
 | R-05 | Approval parameter tampering or replay | High | M3: approval stores hash of canonical parameters, single-use, expiry, re-authorization at execution. |
@@ -62,6 +64,9 @@ Boundaries: browser â†” Next.js server (session cookie, origin checks); server â
 | R-13 | A leaked webhook secret would allow forged notifications | Medium | Forgeries still need a matching attempt, an active unexpired reservation and the exact amount to produce tickets. Rotate `PAYMENT_WEBHOOK_SECRET`; real providers add per-endpoint secrets and IP allow-lists. |
 | R-14 | Application rate limits are per user, not per IP | Low | Auth endpoints are per IP (Better Auth). Anonymous catalogue reads are unthrottled; CDN caching and WAF in production. |
 | R-15 | `after()` maintenance passes add work to attendee requests | Low | Bounded (10 jobs), best-effort; correctness never depends on them. |
-| R-16 | A hold released while its payment is pending ends as a refund | Low | Deterministic (late-success policy). UI in M2 should disable release while a payment is pending. |
+| R-16 | A hold released while its payment is pending ends as a refund | Low | **Mitigated in M2**: the checkout offers release only when no payment is in flight. The API still allows it; outcome stays deterministic. |
+| R-17 | Imagery is hotlinked from Unsplash | Low | Availability and privacy (Unsplash sees image requests). Production: copy approved images to our own storage/CDN. Required `img-src` entry for the future CSP. |
+| R-18 | Simulator demo controls are visible in checkout when enabled | Low | Only where `PAYMENT_SIMULATOR_SCENARIOS=enabled` (default off outside local/test); they affect only the caller's own simulated payment. Keep disabled on any public demo. |
+| R-19 | The opportunistic maintenance throttle is per server instance (in memory) | Low | Optimisation only, never a source of truth; correctness uses the database clock. Prevents polling stampedes that saturated a 5-connection pool under 12 parallel browsers. |
 
 Critical or unmitigated High findings block public deployment.

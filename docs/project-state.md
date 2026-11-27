@@ -1,46 +1,44 @@
 # Project state
 
-Last updated: 2026-11-27 · Current milestone: **M1 complete — awaiting independent review**. Do not start M2 until the review is closed.
+Last updated: 2026-11-27 · Current milestone: **M2 complete — awaiting independent review**. Do not start M3 until the review is closed.
 
-Review packages: [reports/m0-report.md](reports/m0-report.md) · [reports/m1-report.md](reports/m1-report.md).
+Review packages: [reports/m0-report.md](reports/m0-report.md) · [reports/m1-report.md](reports/m1-report.md) · [reports/m2-report.md](reports/m2-report.md).
 
 ## Milestones
 
 | Milestone | Status |
 | --- | --- |
 | M0 Architecture and foundation | ✅ Done (conditionally approved) |
-| M1 Transactional ticketing engine | ✅ Done (pending review) |
-| M2 Attendee experience | ⏳ Next |
-| M3 AI and organizer intelligence | — |
+| M1 Transactional ticketing engine | ✅ Done (conditionally approved) |
+| M2 Attendee experience | ✅ Done (pending review) |
+| M3 AI and organizer intelligence | ⏳ Next |
 | M4 Engineering intelligence | — |
 | M5 Verification and release | — |
 
-## M1 delivered
+## M2 delivered
 
-- Catalogue and organizer management (`events`, `inventory`), atomic reservations (`reservations`), simulated payments with reconciliation and refunds (`payments`), orders and tickets (`ticketing`), durable jobs and rate limiting (`operations`), composition root.
-- Review corrections: composite FKs across every transactional relationship; provider outcome vs acceptance split (ADR-0006); atomic per-user cap; idempotency bound to request hash; server-side prices; DB-clock expiry independent of jobs (ADR-0007); state-machine triggers; CSRF origin check; signed notifications; scenario gating; admin seeding guard; least-privilege role script.
-- 16 HTTP endpoints ([api.md](api.md)) with correlation ids, strict validation, uniform errors.
-- Service-driven seed: 240 historical orders (`origin = 'seed'`), Sunset Sessions sold out 150/150.
-- Tests: 103 Vitest (23 unit, 80 integration on PostgreSQL) + 5 Playwright, including a purchase journey on the production build.
+- Pre-M2 review fixes: provider success after a failed attempt is reconciled (accepted or refunded), inferred failures are verified with the provider, unreconciled-success report; payment Idempotency-Keys bound to request parameters.
+- Attendee interface: home, discover, event detail with ticket selection, sign-in/up with safe redirects and selection carried through sign-in, checkout (simulated payment, countdown from DB clock, failure/retry, pending, expired, refund notices), wallet and ticket pass with server-rendered QR; designed 404 and error states.
+- Content: six fictional events across two organisers with licensed photography and credits ([assets.md](assets.md)); catalogue search, facets and availability status in the `events` module.
+- Quality: 124 Vitest tests, 36 Playwright tests on desktop and mobile including axe accessibility scans; screenshots in `docs/reports/m2/`.
 
 ## Known limitations
 
-- No UI beyond the holding page (M2). No sign-in screen; sessions via the auth API.
-- Single currency per reservation; no service fees; no ticket transfer, check-in or QR (M2 companion).
-- Organizer reads are minimal (event list with capacity/sold); analytics and demand signals are M3.
-- Refunds and payments are simulated only; order-level refunds/cancellations are not implemented.
-- Vercel Cron is daily; delayed notifications in a deployed demo advance via polling (`after()`) or the protected runner.
-- Not deployed. Neon and Vercel approved in principle; credentials not provided.
+- No organizer or Control Center UI yet (M3/M4). Concierge and living ticket are honest placeholders.
+- Waitlist / "notify me" for sold-out sessions is a labelled slot only; demand capture arrives with M3.
+- Imagery is hotlinked from Unsplash (R-17). No CSP yet (R-02, M5).
+- No email verification, password reset or social sign-in.
+- QR codes are display-only; no check-in.
+- Not deployed.
 
-## Next actions (M2 — attendee experience, after review)
+## Next actions (M3 — AI and organizer intelligence, after review)
 
-1. Visual identity and layout system on the existing tokens; sign-in/sign-up screens on Better Auth.
-2. `/` and `/discover`: editorial discovery over `listPublishedEvents`.
-3. `/events/[slug]`: event page with live availability, experiences and sold-out states.
-4. `/checkout/[reservationId]`: hold countdown, simulated payment (scenario picker only where enabled), pending/failed/expired states, polling.
-5. `/tickets`, `/tickets/[id]`: digital tickets with code and QR.
-6. Responsive and reduced-motion refinement; Playwright journeys for desktop and mobile.
+1. Demand signals: capture searches with no/low results, sold-out views and waitlist requests (the sold-out slot on the event page).
+2. AI Gateway (Anthropic SDK, Haiku via env, budgets, timeouts, usage records) and the concierge on `/discover` using registry actions only.
+3. Business Action Registry with approvals bound to parameter hashes; `experience.create_draft` and `experience.publish` as the flagship flow.
+4. Organizer dashboard (`/organizer`): sales, unmet demand for Sunset Sessions, recommendation with evidence and revenue assumptions, approval inbox.
+5. Attribution of sales to recommendation-created experiences.
 
 ## Open decisions for the CTO
 
-See [reports/m1-report.md §12](reports/m1-report.md#12-decisions-requested): Neon/Vercel credentials, admin exposure on preview, simulator scenarios on the public demo, cron plan.
+See [reports/m2-report.md §11](reports/m2-report.md#11-decisions-requested).

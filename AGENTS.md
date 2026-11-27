@@ -21,7 +21,8 @@ Operating guide for any coding agent (Claude Code, Cursor, Codex) or engineer wo
 | Fast gate (types, lint, boundaries, unit) | `pnpm check` |
 | Integration tests (real Postgres, resets `*_test` DB) | `pnpm test:integration` |
 | Run background jobs once (local) | `curl -X POST -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/operations/run` |
-| End-to-end tests | `pnpm build && pnpm test:e2e` |
+| End-to-end tests (desktop + mobile, axe) | `pnpm build && pnpm test:e2e` |
+| Report screenshots / page metrics | `CAPTURE=1 pnpm exec playwright test capture` · `METRICS=1 pnpm exec playwright test metrics --workers=1` |
 | New migration after schema change | `pnpm db:generate --name <change>` |
 
 Runtime: Node 24 (`.node-version`), pnpm via Corepack (`packageManager` in `package.json`).
@@ -37,6 +38,7 @@ Runtime: Node 24 (`.node-version`), pnpm via Corepack (`packageManager` in `pack
 - Lock order is provider event → reservation → payment attempt → inventory rows by id. Time decisions use the database clock.
 - Only `inventory` mutates capacity counters; only `closeReservation` leaves the `active` state.
 - Configuration and cross-module job wiring live in `src/composition/`; modules never import it.
+- Attendee pages: server components call module services; mutations go through `/api/*`. `components/` is presentational. Database or session reads sit behind `<Suspense>` after `await connection()`. Never branch first render on reduced motion; use the global `MotionConfig`. Text on dark uses graphite-400 or lighter and `violet-soft` (contrast).
 - Schema changes go through Drizzle migrations in `drizzle/`. Never edit an applied migration.
 - Payments are simulated. The database rejects non-simulated payment attempts.
 - Never commit secrets. `.env.local` is git-ignored; `.env.example` documents every variable.

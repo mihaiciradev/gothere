@@ -107,9 +107,50 @@ Late, duplicate or mismatched provider successes never create orders: the paymen
 - Better Auth for sessions (database-backed, HttpOnly cookies, origin checks, database-backed rate limiting). Tenancy and permissions are ours. See [ADR-0003](adr/0003-auth-and-tenancy.md).
 - No in-memory transactional state; background work is durable rows in PostgreSQL claimed with leases (M1/M4, see [operations.md](operations.md#background-jobs)).
 
+## Attendee interface (M2)
+
+```text
+src/app/(attendee)/
+├── layout.tsx               header (session streamed behind Suspense), footer, MotionProvider, skip link
+├── page.tsx                 /            featured event, ticker, event index, experiences rail, categories, concierge slot
+├── discover/page.tsx        /discover    search + category/city/month filters (plain links), results
+├── events/[slug]/           /events/:slug  hero, about, programme by day (event time zone), ticket panel (client)
+├── checkout/[reservationId]/ /checkout/:id  server-loaded state, client state machine view, informational countdown
+├── tickets/, tickets/[id]/  wallet and ticket pass (QR rendered on the server as an SVG data URI)
+├── sign-in/, sign-up/       Better Auth email/password; `next` validated by safeRedirectPath
+├── _components/, _lib/      route-level components (session-aware header, auth form, event index) and presenters
+└── not-found.tsx, error.tsx designed 404 and error states
+src/components/              presentational only: Photo + image loader, motion primitives, brand, header shell, tags
+```
+
+**Rendering.** `cacheComponents` is on: every page is a static shell (prerendered) with database and session reads streamed
+behind `<Suspense>` after `await connection()`. Build output marks all attendee routes as Partial Prerender.
+
+**Data flow.** Server components call module services directly (`listPublishedEvents`, `getPublishedEvent`,
+`getReservationForOwner`, `listTicketsForUser`…) with the same owner checks as the API. Client components never touch the
+database: mutations (reserve, pay, release) go through the existing API routes, so validation, CSRF, rate limiting and
+idempotency are shared. Prices shown in the ticket panel are a preview; the reservation response is authoritative.
+
+**Client JavaScript** is limited to: header shell (scroll state, mobile menu), event index hover preview, reveal/parallax
+motion, ticket panel, checkout state view, auth form, sign-out. Everything else is server-rendered.
+
+**Time.** All dates render in the event's IANA time zone. The checkout countdown starts from `secondsRemaining`, computed
+by the database clock; the client only counts down from it and asks the server when it reaches zero.
+
+**Next 16 behaviours handled.** Visited routes stay mounted in hidden `<Activity>` boundaries: components reset in-flight
+state in effect cleanups, and the ticket panel is keyed by its carried selection. `usePathname` lives inside its own
+Suspense boundary so dynamic routes keep a static shell.
+
+**Motion.** Motion (`motion/react`) for reveal, parallax, hover preview and state transitions; transform/opacity only (CLS
+measured at 0–0.002). `MotionConfig reducedMotion="user"` disables transform animation for reduced-motion users with
+identical server/client markup. GSAP was not added: Motion covers the sequences needed, and a second animation runtime
+would add weight without a visible gain.
+
+**Imagery.** Unsplash URLs resized by their CDN via a custom `next/image` loader; sources in [assets.md](assets.md).
+
 ## Design system
 
-Single source: `src/app/globals.css`. Brand primitives (`obsidian #101010`, `lime #E5FF54`, `offwhite #F5F5F0`, `violet #8264FF`) map to semantic surface tokens (`bg`, `raised`, `fg`, `muted`, `border`, `accent`, `accent-fg`) per interface via `data-surface="attendee|organizer|control"`. Typography: Space Grotesk (display), Geist (UI), Geist Mono (technical). Reduced motion is honoured globally.
+Single source: `src/app/globals.css`. Brand primitives (`obsidian #101010`, `lime #E5FF54`, `offwhite #F5F5F0`, `violet #8264FF`) map to semantic surface tokens (`bg`, `raised`, `fg`, `muted`, `border`, `accent`, `accent-fg`) per interface via `data-surface="attendee|organizer|control"`. Typography: Space Grotesk (display), Geist (UI), Geist Mono (technical, `label` utility). Editorial primitives: `label`, `hairline`, `scrim-*`, `container-edge`, marquee. Violet marks intelligence features (concierge, living ticket, simulator); lime marks action and live state. Reduced motion is honoured globally.
 
 Measured contrast (WCAG 2.x):
 
@@ -118,7 +159,9 @@ Measured contrast (WCAG 2.x):
 | offwhite on obsidian | 17.4 | attendee body |
 | lime on obsidian / obsidian on lime | 17.0 | accents, primary buttons |
 | graphite-300 on obsidian | 9.3 | attendee muted text |
-| violet on obsidian | 4.7 | accents on dark (AA) |
+| violet on obsidian | 4.7 | non-text accents on dark (borders, markers) |
+| violet-soft `#9A84FF` on graphite-900 / obsidian | 6.1 / 6.5 | violet **text** on dark (concierge, simulator, living ticket) |
+| graphite-400 on obsidian | 5.6 | secondary labels on dark (graphite-500 is 2.9 — never for text on dark) |
 | violet on offwhite | 3.7 | **large text / non-text only** |
 | white on violet-strong `#6A4CF0` | 5.4 | organizer primary buttons |
 | graphite-500 on offwhite | 6.0 | organizer muted text |

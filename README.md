@@ -52,5 +52,6 @@ CI runs all of the above on every push and pull request (`.github/workflows/ci.y
 | [docs/security.md](docs/security.md) | Threat model and risk register |
 | [docs/ai-actions.md](docs/ai-actions.md) | Business Action Registry and approvals |
 | [docs/operations.md](docs/operations.md) | Environments, configuration, migrations, jobs |
+| [docs/assets.md](docs/assets.md) | Photography sources, licence and credits |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [AGENTS.md](AGENTS.md) | Working rules for humans and coding agents |
