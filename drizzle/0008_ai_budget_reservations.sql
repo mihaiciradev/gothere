@@ -1,0 +1,1 @@
+ALTER TYPE "public"."ai_call_status" ADD VALUE 'reserved' BEFORE 'succeeded';

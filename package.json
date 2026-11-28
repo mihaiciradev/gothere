@@ -25,6 +25,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
     "db:check-role": "tsx scripts/check-runtime-role.ts",
+    "ai:verify-live": "tsx scripts/verify-live-ai.ts",
+    "vercel:check-env": "tsx scripts/check-vercel-env.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm test:unit"
   },
   "dependencies": {

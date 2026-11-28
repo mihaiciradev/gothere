@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { DbExecutor } from "@/infrastructure/db/client";
 import { logger } from "@/infrastructure/logging/logger";
 import { currentCorrelationId } from "@/infrastructure/request-context";
-import { aiSpendThisMonth, recordAiUsage } from "@/modules/operations";
+import { recordAiUsage, reserveAiBudget, settleAiUsage } from "@/modules/operations";
 import { type AiMessage, type AiPricing, type AiProvider, AiProviderError, type AiToolSpec } from "./types";
 
 export type AiGatewayConfig = {
@@ -56,11 +56,28 @@ export function costMicroUsd(pricing: AiPricing, usage: { inputTokens: number; o
   return Math.ceil((usage.inputTokens * pricing.inputMicroUsdPerMTok + usage.outputTokens * pricing.outputMicroUsdPerMTok) / 1_000_000);
 }
 
+/** Fixed allowance for provider-side prompt framing (tool-use preamble, role markers) not present in our JSON. */
+const PROMPT_OVERHEAD_TOKENS = 2_048;
+
+/**
+ * Upper bound on one call's cost, known before the call. Every token encodes at least one byte, so the UTF-8 size of
+ * everything we send (plus a framing allowance) bounds the input tokens; output, reasoning included, is capped by
+ * `max_tokens`. Reserving this bound is what makes the monthly budget a hard ceiling.
+ */
+export function maxCallCostMicroUsd(
+  pricing: AiPricing,
+  request: { system: string; messages: AiMessage[]; tools: AiToolSpec[]; maxOutputTokens: number },
+): number {
+  const bytes = Buffer.byteLength(JSON.stringify({ system: request.system, messages: request.messages, tools: request.tools }), "utf8");
+  return costMicroUsd(pricing, { inputTokens: bytes + PROMPT_OVERHEAD_TOKENS, outputTokens: request.maxOutputTokens });
+}
+
 const toolResultText = (result: ToolResult) =>
   JSON.stringify(result.ok ? { data: result.data } : { error: result.error });
 
 /**
- * The AI Gateway: the only code that talks to a model. Enforces budget (checked before every call), wall-clock and
+ * The AI Gateway: the only code that talks to a model. Enforces the budget (an atomic worst-case reservation before
+ * every call, settled to the actual cost afterwards), wall-clock and
  * per-call timeouts, a bounded tool loop, schema validation of the final answer, and records usage and cost for every
  * call. It never throws for provider problems: callers get a typed failure and fall back to deterministic behaviour.
  */
@@ -101,14 +118,34 @@ export function createAiGateway(config: AiGatewayConfig): AiGateway {
       const maxToolCalls = request.maxToolCalls ?? 8;
       let finalAttempts = 0;
 
+      const maxOutputTokens = request.maxOutputTokens ?? 2048;
+      const settle = (reservationId: string, outcome: Parameters<typeof settleAiUsage>[2]) =>
+        settleAiUsage(db, reservationId, outcome).catch((error) => log.error("failed to settle AI usage; reservation kept", { error }));
+
       for (let step = 0; step < maxSteps; step++) {
-        if ((await aiSpendThisMonth(db)) >= config.monthlyBudgetMicroUsd) {
-          await record({ status: "budget_exceeded" });
-          log.warn("AI budget exhausted; falling back");
-          return { status: "budget_exceeded", model: provider.model, toolCalls };
-        }
         const remaining = deadline - Date.now();
         if (remaining <= 0) return { status: "timeout", model: provider.model, toolCalls };
+
+        // Reserve the worst case before calling: concurrent requests cannot jointly exceed the budget.
+        const reserveMicroUsd = maxCallCostMicroUsd(config.pricing, { system: request.system, messages, tools: specs, maxOutputTokens });
+        const reservation = await reserveAiBudget(
+          db,
+          {
+            feature: request.feature,
+            provider: provider.name,
+            model: provider.model,
+            organizationId: request.attribution?.organizationId ?? null,
+            userId: request.attribution?.userId ?? null,
+            correlationId,
+            reserveMicroUsd,
+          },
+          config.monthlyBudgetMicroUsd,
+        );
+        if (!reservation) {
+          await record({ status: "budget_exceeded" });
+          log.warn("AI budget exhausted; falling back", { reserveMicroUsd });
+          return { status: "budget_exceeded", model: provider.model, toolCalls };
+        }
 
         const started = Date.now();
         let response;
@@ -117,23 +154,37 @@ export function createAiGateway(config: AiGatewayConfig): AiGateway {
             system: request.system,
             messages,
             tools: specs,
-            maxOutputTokens: request.maxOutputTokens ?? 2048,
+            maxOutputTokens,
             signal: AbortSignal.timeout(remaining),
           });
         } catch (error) {
           const kind = error instanceof AiProviderError ? error.kind : "unavailable";
-          await record({ status: kind === "timeout" ? "timeout" : "failed", latencyMs: Date.now() - started, errorCode: kind });
+          // A rejected or rate-limited request is not billed. After a timeout or a dropped connection the provider may
+          // still have billed the call, so the reserved worst case is kept as its cost.
+          const billed = kind === "timeout" || kind === "unavailable";
+          await settle(reservation.id, {
+            status: kind === "timeout" ? "timeout" : "failed",
+            inputTokens: 0,
+            outputTokens: 0,
+            costMicroUsd: billed ? reservation.reservedMicroUsd : 0,
+            latencyMs: Date.now() - started,
+            errorCode: kind,
+          });
           log.warn("AI call failed", { kind });
           return { status: kind === "timeout" ? "timeout" : "failed", model: provider.model, toolCalls };
         }
         const latencyMs = Date.now() - started;
         const usage = { inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens, latencyMs };
+        const actual = { ...usage, costMicroUsd: costMicroUsd(config.pricing, usage), errorCode: null };
 
         if (response.stopReason === "refusal") {
-          await record({ status: "refused", ...usage });
+          await settle(reservation.id, { status: "refused", ...actual });
           return { status: "refused", model: provider.model, toolCalls };
         }
-        await record({ status: "succeeded", ...usage });
+        await settle(reservation.id, { status: "succeeded", ...actual });
+        if (actual.costMicroUsd > reservation.reservedMicroUsd) {
+          log.error("AI call cost more than its reservation", { reserved: reservation.reservedMicroUsd, actual: actual.costMicroUsd });
+        }
         log.info("AI call", { step, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, latencyMs });
         messages.push(response.message);
 

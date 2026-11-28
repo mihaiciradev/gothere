@@ -22,6 +22,11 @@ const serverEnvSchema = z.object({
   /** Non-default payment simulator scenarios are a demonstration control; off unless explicitly enabled. */
   PAYMENT_SIMULATOR_SCENARIOS: unsetIfEmpty(z.enum(["enabled", "disabled"]).optional()),
 
+  /** Temporary pre-release access gate (src/proxy.ts). Deployed environments fail closed without a password. */
+  SITE_ACCESS_PASSWORD: unsetIfEmpty(z.string().min(12, "must be at least 12 characters").optional()),
+  /** "open" disables the gate explicitly (only once the site may be public). */
+  SITE_ACCESS: unsetIfEmpty(z.enum(["open"]).optional()),
+
   /** Runtime AI. All optional: without a key, model and budget the app runs with deterministic fallbacks. */
   ANTHROPIC_API_KEY: unsetIfEmpty(z.string().min(1).optional()),
   /** Fast, low-cost model for routine inference (a Haiku-class id). Opus is rejected for runtime use. */

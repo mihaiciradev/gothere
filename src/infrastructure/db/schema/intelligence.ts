@@ -193,6 +193,7 @@ export const actionRequests = pgTable(
 );
 
 export const aiCallStatus = pgEnum("ai_call_status", [
+  "reserved",
   "succeeded",
   "failed",
   "timeout",
@@ -201,7 +202,11 @@ export const aiCallStatus = pgEnum("ai_call_status", [
   "budget_exceeded",
 ]);
 
-/** One row per provider call (or per call refused by the budget). Cost is integer micro-USD. No prompt content. */
+/**
+ * One row per provider call (or per call refused by the budget). Cost is integer micro-USD. No prompt content.
+ * A call first inserts a `reserved` row holding its worst-case cost (atomically against the monthly budget), then
+ * settles it to the actual outcome and cost. Unsettled reservations keep counting, so a crash can only under-spend.
+ */
 export const aiUsageRecords = pgTable(
   "ai_usage_records",
   {

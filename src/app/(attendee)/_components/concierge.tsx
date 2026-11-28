@@ -112,6 +112,12 @@ export function Concierge({ compact = false }: { compact?: boolean }) {
             {pending ? "Looking…" : "Ask"}
           </button>
         </form>
+        <p className="mt-3 text-xs text-graphite-400">
+          AI picks are for signed-in visitors; your message is then sent to Anthropic’s Claude.{" "}
+          <Link href="/privacy" className="underline hover:text-offwhite">
+            Privacy notice
+          </Link>
+        </p>
         {!answer && !pending && (
           <ul className="mt-5 flex flex-wrap gap-2" aria-label="Examples">
             {examples.map((example) => (

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type ActionContext, invokeAction } from "@/actions";
 import type { Database } from "@/infrastructure/db/client";
+import { logger } from "@/infrastructure/logging/logger";
 import { type Recommendation, applyNarrative, getRecommendation, listRecommendations } from "@/modules/analytics";
 import type { Actor } from "@/modules/identity";
 import { AppError } from "@/shared/errors";
@@ -12,10 +13,25 @@ export type OrganizerAgentDeps = { db: Database; gateway: AiGateway; correlation
 const facts = (r: Recommendation) =>
   JSON.stringify({ evidence: r.evidence, proposal: r.proposal, scenarios: r.assumptions.scenarios, risks: r.risks });
 
+/** The brief's facts in the units an organiser reads: money in whole currency (35, not 3500). */
+const briefFacts = (r: Recommendation) => {
+  const major = (minor: number) => minor / 100;
+  const e = r.evidence;
+  const p = r.proposal;
+  return JSON.stringify({
+    currency: p.currency,
+    soldOutSession: { name: e.itemName, capacity: e.capacity, sold: e.sold, price: major(e.priceMinor) },
+    interest: { uniquePeople: e.uniqueInterested, waitlistRequests: e.waitlistRequests, soldOutViewers: e.soldOutViewers, liveSignals: e.liveSignals, seededSignals: e.seedSignals },
+    proposal: { title: p.title, capacity: p.capacity, price: major(p.priceMinor), maximumGross: major(p.maxGrossMinor) },
+    estimates: r.assumptions.scenarios.map((s) => ({ conversionPercent: s.conversionPercent, tickets: s.tickets, gross: major(s.grossMinor) })),
+    risks: r.risks,
+  });
+};
+
 const NARRATIVE_SYSTEM = `You write short commercial briefs for event organisers on GoThere.
 Write 2-4 plain sentences explaining the opportunity in the JSON facts: what sold out, how much unmet interest exists, what is proposed, and the main risk.
-Use only numbers that appear in the facts, written exactly as digits (money is in minor units: 3500 means 35). Do not invent figures, dates, percentages or names.
-Interest is not guaranteed demand: say so. Call write_brief with the text.`;
+Use only numbers that appear in the facts. Write money as the currency code and the amount given, e.g. "EUR 35" or "EUR 5,250". Do not invent figures, dates, percentages or names.
+Interest is not guaranteed demand, and estimates are not revenue: say so. Call write_brief with the text.`;
 
 /**
  * Optional AI narrative for open recommendations. The module stores it only if every number it cites is one of the
@@ -29,7 +45,7 @@ export async function writeNarratives(deps: OrganizerAgentDeps, actor: Actor, or
     const run = await deps.gateway.runAgent(deps.db, {
       feature: "recommendation_narrative",
       system: NARRATIVE_SYSTEM,
-      prompt: `<facts>${facts(rec)}</facts>`,
+      prompt: `<facts>${briefFacts(rec)}</facts>`,
       tools: [],
       final: { name: "write_brief", description: "Submit the brief.", schema: z.object({ brief: z.string().trim().min(40).max(700) }).strict() },
       maxSteps: 2,
@@ -39,6 +55,7 @@ export async function writeNarratives(deps: OrganizerAgentDeps, actor: Actor, or
     if (run.status !== "completed") continue;
     const result = await applyNarrative(deps.db, rec.id, { narrative: run.result.brief, model: run.model, basedOnUpdatedAt: rec.updatedAt });
     if (result.applied) applied++;
+    else logger.info("AI brief not stored", { recommendationId: rec.id, reason: result.reason, ungroundedNumbers: "ungrounded" in result ? result.ungrounded : undefined });
   }
   return { attempted: open.length, applied };
 }

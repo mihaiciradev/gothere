@@ -129,6 +129,16 @@ export function AuthForm({ mode, next }: { mode: Mode; next: string }) {
         <span aria-hidden>→</span>
       </button>
 
+      {mode === "sign-up" && (
+        <p className="text-xs text-graphite-400">
+          By creating an account you agree to how this prototype handles data, described in the{" "}
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-lime">
+            privacy notice
+          </Link>
+          .
+        </p>
+      )}
+
       <p className="text-sm text-graphite-300">
         {mode === "sign-in" ? "New to gothere? " : "Already have an account? "}
         <Link

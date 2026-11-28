@@ -7,6 +7,7 @@ export {
   type AiGatewayConfig,
   costMicroUsd,
   createAiGateway,
+  maxCallCostMicroUsd,
   jsonSchema,
 } from "./gateway";
 export { type ParsedIntent, parseIntent } from "./intent";

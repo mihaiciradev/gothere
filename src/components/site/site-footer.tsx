@@ -29,6 +29,7 @@ export function SiteFooter() {
           <div className="space-y-3">
             <p className="label text-graphite-400">Prototype</p>
             <p className="text-sm text-graphite-300">Fictional events. Payments are simulated; no money moves.</p>
+            <Link className="text-sm hover:text-lime" href="/privacy">Privacy notice</Link>
           </div>
         </nav>
       </div>

@@ -82,7 +82,7 @@ async function searchMode(deps: ConciergeDeps, ctx: ActionContext, message: stri
 }
 
 /**
- * Attendee concierge. With a model: a bounded tool loop over the public read-only actions, answers grounded in the
+ * Attendee concierge. With a model, for signed-in visitors only: a bounded tool loop over the public read-only actions, answers grounded in the
  * tools' results (unknown picks are dropped, prices come from the database). Without one — not configured, over budget,
  * rate limited, failed or timed out — a deterministic search answers instead. Either way, a request that finds nothing
  * is recorded as unmet demand. The concierge holds no write tools and never touches checkout.
@@ -94,7 +94,8 @@ export async function askConcierge(deps: ConciergeDeps, input: unknown, who: { a
   const searchCtx: ActionContext = { ...ctx, initiator: "automation" };
 
   let answer: ConciergeAnswer | null = null;
-  if (deps.gateway.available) {
+  // AI spending is reserved for signed-in visitors: anonymous traffic never reaches the provider (ADR-0011).
+  if (deps.gateway.available && who.actor) {
     try {
       await consumeRateLimit(deps.db, `concierge-ai:${anonymousKey}`, { limit: 6, windowSeconds: 600 });
     } catch (error) {
@@ -120,19 +121,27 @@ export async function askConcierge(deps: ConciergeDeps, input: unknown, who: { a
         attribution: { userId: who.actor?.userId ?? null },
       });
       if (run.status === "completed") {
-        const grounded = run.result.picks.filter(
-          (p) => seen.has(p.eventSlug) && (!p.experienceSlug || seen.get(p.eventSlug)!.has(p.experienceSlug)),
-        );
+        // Keep only what the tools returned. An unverified experience is dropped but its (verified) event is kept.
+        const grounded = run.result.picks
+          .filter((p) => seen.has(p.eventSlug))
+          .map((p) => (p.experienceSlug && !seen.get(p.eventSlug)!.has(p.experienceSlug) ? { eventSlug: p.eventSlug, why: p.why } : p));
         const picks = await hydrate(
           deps.db,
           grounded.map((p) => ({ ...p, why: MONEY_IN_TEXT.test(p.why) ? "Matches what you asked for." : p.why })),
         );
-        const reply = MONEY_IN_TEXT.test(run.result.reply) ? (picks.length ? "Here are some options that fit." : "I could not find a match.") : run.result.reply;
-        answer = { mode: "ai", reply, notice: null, picks };
+        if (picks.length === 0) {
+          // Nothing verifiable from the model: answer with the deterministic search rather than an empty reply.
+          answer = await searchMode(deps, searchCtx, message, "The AI concierge found nothing it could verify, so this is a plain search.");
+        } else {
+          const reply = MONEY_IN_TEXT.test(run.result.reply) ? "Here are some options that fit." : run.result.reply;
+          answer = { mode: "ai", reply, notice: null, picks };
+        }
       } else {
         answer = await searchMode(deps, searchCtx, message, "The AI concierge is unavailable right now, so this is a plain search.");
       }
     }
+  } else if (deps.gateway.available) {
+    answer = await searchMode(deps, searchCtx, message, "Sign in to get AI picks. This is a plain search.");
   } else {
     answer = await searchMode(deps, searchCtx, message, "The AI concierge is not configured in this environment, so this is a plain search.");
   }

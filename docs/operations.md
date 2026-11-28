@@ -38,6 +38,27 @@ AI is enabled only when key, model, budget and a price are all known (`src/compo
 concierge answers with deterministic search, the organiser agent runs as a fixed automation through the same
 governed actions, and briefs are rules text. The UI states which path answered. Spend is in `ai_usage_records`.
 
+## Runtime AI
+
+- **Budget is a hard ceiling.** Before every provider call the gateway reserves the call's worst-case cost (request
+  bytes + 2,048 tokens of framing at the input price, `max_tokens` at the output price) under a PostgreSQL advisory
+  lock; if it does not fit in `AI_MONTHLY_BUDGET_MINOR`, no call is made and the feature falls back. The row is then
+  settled to the real tokens and cost. Timeouts keep the reserved amount (the call may have been billed).
+- **Ledgers are per database.** Local, test and Neon each count only their own `ai_usage_records`. Intended runtime
+  ceiling: `AI_MONTHLY_BUDGET_MINOR=20` (US$0.20/month) on Vercel; local development is also set to 20.
+- **Tests never call a provider.** Vitest and Playwright blank the AI variables; AI paths use a scripted provider.
+- **Live spot-check (spends money, opt-in):** against a local seeded database only, with an explicit cap enforced by
+  the same reservations: `DATABASE_URL=<local test db> pnpm ai:verify-live --max-usd=0.02`.
+
+Live verification, 2026-11-28, `claude-haiku-5-5`, local test database (three runs, total cap US$0.02):
+
+| Run | Concierge | Organiser agent | Brief | Calls | Input / output tokens | Cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | AI, 2 grounded picks | draft + publication pending approval (`ai_agent`, HIGH) | stored; amounts in cents (prompt fixed) | 9 | 18,210 / 2,871 | US$0.003262 |
+| 2 | AI, no verifiable picks (fallback added) | draft + pending approval | rejected by number grounding (rules text kept) | 8 | 13,969 / 1,862 | US$0.002332 |
+| 3 | AI, 1 grounded pick | draft + pending approval | stored, EUR amounts, grounded | 9 | 17,576 / 2,497 | US$0.003011 |
+| **Total** | | | | **26** | **49,755 / 7,230** | **US$0.008605** |
+
 Introduced later: `SENTRY_DSN` (M4).
 
 ## Database
@@ -82,6 +103,33 @@ the statement timeout is set on the role. Use `sslmode=verify-full&channel_bindi
 Scripts load only the file named by `--env-file=` (never `.env.local` as well) and refuse a non-local database
 unless its URL came from such a file. Every later migration: step 3 again. Local development is unchanged
 (`pnpm db:migrate`, `pnpm db:seed` use `.env.local`).
+
+**Status (2026-11-28):** Neon `neondb` (eu-central-1) migrated through `0008` as `gothere_migrator` over the direct
+connection; seeded as `gothere_app` (5 demo users, 2 organizations, 6 events, 240 seeded orders, 593 demand signals,
+no administrator); `pnpm db:check-role` passed on both the direct and the pooled connection (non-superuser, 10 s
+statement timeout via the role, data read/write and transaction locks allowed, DDL / TRUNCATE / audit rewrites /
+approval deletes denied). Neon AI ledger: empty.
+
+## Vercel and domain
+
+- The project is Git-connected: **every push to `main` deploys production** to https://gothere.mihaic.me (reads Neon).
+- **Access gate (ADR-0011):** set `SITE_ACCESS_PASSWORD` (≥ 12 chars, Sensitive) in Vercel → Production. Without it the
+  deployed site is closed except `/privacy`, the payment webhook and the cron endpoint. Share the password only with
+  reviewers; rotate it to revoke every access cookie. Remove the gate after M5 with `SITE_ACCESS=open`.
+  Env changes take effect on the next deployment (`pnpm dlx vercel@latest redeploy <url>` or a push).
+- Verify the production variables without exposing them (values never printed; the pulled file is deleted):
+  ```
+  pnpm dlx vercel@latest login
+  pnpm dlx vercel@latest link
+  pnpm dlx vercel@latest env pull .env.vercel.production --environment=production --yes
+  pnpm vercel:check-env .env.vercel.production --domain=https://gothere.mihaic.me
+  ```
+  Variables marked *Sensitive* cannot be pulled; the checker reports them as present-but-unreadable.
+- Domain: `mihaic.me` uses Vercel DNS (`ns1/ns2.vercel-dns.com`), so `gothere.mihaic.me` needs no external DNS
+  record. In the project: Settings → Domains → `gothere.mihaic.me` assigned to **Production**, status *Valid
+  Configuration*, certificate issued. `BETTER_AUTH_URL` must equal `https://gothere.mihaic.me` exactly (no trailing
+  slash): it is the only trusted origin for sign-in and CSRF checks. Other hostnames (the `*.vercel.app` URL) will
+  serve pages but reject cookie-authenticated mutations, by design.
 
 ## Seed data
 

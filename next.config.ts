@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { contentSecurityPolicy } from "./src/infrastructure/access-gate";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -6,6 +7,13 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  {
+    key: "Content-Security-Policy",
+    value: contentSecurityPolicy({
+      dev: process.env.NODE_ENV === "development",
+      https: (process.env.BETTER_AUTH_URL ?? "").startsWith("https://"),
+    }),
+  },
 ];
 
 const nextConfig: NextConfig = {

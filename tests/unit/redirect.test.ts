@@ -7,6 +7,7 @@ describe("safe redirect after sign-in", () => {
     expect(safeRedirectPath("/checkout/abc")).toBe("/checkout/abc");
     expect(safeRedirectPath("/tickets")).toBe("/tickets");
     expect(safeRedirectPath("/organizer/approvals?org=tidal-assembly")).toBe("/organizer/approvals?org=tidal-assembly");
+    expect(safeRedirectPath("/control/incidents")).toBe("/control/incidents");
     expect(safeRedirectPath("/")).toBe("/");
   });
 
@@ -22,7 +23,8 @@ describe("safe redirect after sign-in", () => {
       "/events/\nx",
       "javascript:alert(1)",
       "/api/auth/sign-out",
-      "/control",
+      "/controlpanel",
+      "/api/access",
       "/organizerevil",
       "/ticketsevil",
       "",
