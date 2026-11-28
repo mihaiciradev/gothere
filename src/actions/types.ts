@@ -35,7 +35,7 @@ export type ActionDefinition<Input, Params, Output> = {
   /** Canonical, stored parameters after binding (equal to the input when there is nothing to bind). */
   params: z.ZodType<Params>;
   risk: Risk;
-  scope: "public" | "organization";
+  scope: "public" | "organization" | "platform";
   permission?: OrganizationPermission;
   /** `when_not_human`: an AI agent or automation needs a human approval; a human caller is already accountable. */
   approval: "none" | "when_not_human" | "always";

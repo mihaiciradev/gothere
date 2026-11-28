@@ -36,9 +36,13 @@ type ActionDefinition<Input, Params, Output> = {
 | `demand.analyze` | LOW | `recommendation.read` | none | one recommendation per sold-out session; re-run refreshes open ones |
 | `experience.create_draft` | MEDIUM | `experience.write` | none (private draft) | one draft per recommendation; repeat returns it |
 | `experience.publish` | HIGH | `experience.publish` | when initiated by an agent or automation | unique open request per parameters; executes once |
+| `incident.read_report` | LOW | platform admin | none | read-only |
+| `incident.generate_investigation_package` | MEDIUM | platform admin | none | a package from the last hour is reused |
+| `incident.dispatch_investigation` | HIGH | platform admin | **always** (people too; any severity) | bound to package id + content hash; executes once; fails "not executed" while no external agent is connected |
 
 CRITICAL actions (refunds, deleting events, payouts) are not registered; the executor refuses CRITICAL for
-non-human initiators anyway. `incident.investigate` arrives with M4.
+non-human initiators anyway. Platform-scope actions (M4) are authorized by the platform-admin role read from the
+database and have no organization; their approvals live in the Control Center ([ADR-0013](adr/0013-governed-engineering-agents.md)).
 
 ## Execution pipeline (`invokeAction`)
 

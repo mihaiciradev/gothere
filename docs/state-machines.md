@@ -134,3 +134,24 @@ transaction, so a replay or a concurrent call updates nothing.
 ```
 
 Re-analysis refreshes only `open` recommendations (numbers replaced, brief reset to the rules text).
+
+## Incident
+
+```text
+ (detected) ──► open ──acknowledge──► investigating ──► mitigated ──► resolved
+                  │                        ▲     └────────────────────► resolved
+                  ├────────────────────────┼──► mitigated ──investigating
+                  └──────────────────────────────────────────────────► resolved
+```
+
+The first analysis moves `open` to `investigating`. `resolved` is terminal and needs a note; a new occurrence of the
+same fingerprint opens a new incident. Every change is on the incident timeline and in the audit trail.
+
+## Investigation package
+
+```text
+ generated ──(human-approved dispatch, adapter connected)──► dispatched ──► completed | failed
+```
+
+`generated` means a document only. With no external agent connected, an approved dispatch fails and the package stays
+`generated` ("not executed" in the UI).

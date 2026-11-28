@@ -151,9 +151,8 @@ export const actionRequests = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     actionId: text("action_id").notNull(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Null for platform-scope actions (Control Center), which are authorized by platform role, not membership. */
+    organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -178,6 +177,7 @@ export const actionRequests = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
+    // Recreated in drizzle/0010 as NULLS NOT DISTINCT so platform-scope (NULL organization) requests are unique too.
     uniqueIndex("action_requests_open_unique")
       .on(t.actionId, t.organizationId, t.paramsHash)
       .where(sql`${t.status} IN ('pending_approval', 'approved')`),

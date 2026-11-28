@@ -1,9 +1,11 @@
 import { after } from "next/server";
 import { ZodError } from "zod";
 import { runOperationsCycle } from "@/composition/runtime";
+import { getDb } from "@/infrastructure/db/client";
 import { serverEnv } from "@/infrastructure/env";
 import { logger } from "@/infrastructure/logging/logger";
 import { normalizeCorrelationId, runWithContext } from "@/infrastructure/request-context";
+import { normalizePath, recordOperationalEvent, stackFrames } from "@/modules/incidents";
 import { AppError, isAppError } from "@/shared/errors";
 
 const MAX_BODY_BYTES = 32 * 1024;
@@ -13,7 +15,7 @@ export function json(data: unknown, status = 200): Response {
   return Response.json({ data }, { status, headers: { "cache-control": "no-store" } });
 }
 
-function errorResponse(error: unknown, correlationId: string): Response {
+function errorResponse(error: unknown, correlationId: string, request: Request): Response {
   if (error instanceof ZodError) {
     return Response.json(
       {
@@ -34,6 +36,7 @@ function errorResponse(error: unknown, correlationId: string): Response {
     );
   }
   logger.error("unhandled request error", { error });
+  reportUnhandled(request, error, correlationId);
   return Response.json(
     { error: { code: "INTERNAL", message: "Something went wrong." }, correlationId },
     { status: 500 },
@@ -98,6 +101,29 @@ export function kickOperations(): void {
   }
 }
 
+/**
+ * Turns an unhandled server error into an operational event (incident detection). Recorded after the response when
+ * the platform supports it; never throws and never delays or changes the error response.
+ */
+function reportUnhandled(request: Request, error: unknown, correlationId: string): void {
+  const method = request.method;
+  const path = normalizePath(new URL(request.url).pathname);
+  const errorName = error instanceof Error ? error.name : typeof error;
+  const record = () =>
+    recordOperationalEvent(getDb(), {
+      kind: "http.unhandled_error",
+      message: `${errorName}: ${error instanceof Error ? error.message : String(error)}`,
+      correlationId,
+      context: { method, path, errorName, frames: stackFrames(error) },
+      fingerprintParts: [method, path, errorName],
+    }).then(() => undefined);
+  try {
+    after(record);
+  } catch {
+    void record(); // outside a request scope (tests)
+  }
+}
+
 type Handler<P> = (input: { request: Request; params: P; correlationId: string }) => Promise<Response>;
 
 /** Every API route goes through this: correlation id, CSRF check, uniform error mapping. */
@@ -113,7 +139,7 @@ export function route<P extends Record<string, string> = Record<string, never>>(
         if (options.csrf !== false) assertSameOrigin(request);
         response = await handler({ request, params: await context.params, correlationId });
       } catch (error) {
-        response = errorResponse(error, correlationId);
+        response = errorResponse(error, correlationId, request);
       }
       response.headers.set("x-request-id", correlationId);
       return response;

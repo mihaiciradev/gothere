@@ -64,6 +64,27 @@
       "when": 1795854440522,
       "tag": "0008_ai_budget_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795858495292,
+      "tag": "0009_engineering_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795858499747,
+      "tag": "0010_engineering_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795858668784,
+      "tag": "0011_operational_event_dedupe",
+      "breakpoints": true
     }
   ]
 }

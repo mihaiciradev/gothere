@@ -215,7 +215,12 @@ export async function expireReservation(db: Database, reservationId: string): Pr
 /** Expires overdue reservations, optionally only those holding the given items. Each in its own short transaction. */
 export async function sweepOverdueReservations(
   db: Database,
-  options: { inventoryItemIds?: string[]; limit?: number } = {},
+  options: {
+    inventoryItemIds?: string[];
+    limit?: number;
+    /** Told about every reservation the sweep had to skip (e.g. to raise an incident). Must not throw. */
+    onFailure?: (reservationId: string, error: unknown) => Promise<void> | void;
+  } = {},
 ): Promise<number> {
   const filter = options.inventoryItemIds?.length
     ? inArray(
@@ -240,6 +245,7 @@ export async function sweepOverdueReservations(
       if (await expireReservation(db, id)) expired += 1;
     } catch (error) {
       logger.error("reservation expiry failed; skipped", { reservationId: id, error });
+      await Promise.resolve(options.onFailure?.(id, error)).catch(() => undefined);
     }
   }
   return expired;

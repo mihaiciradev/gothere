@@ -17,6 +17,7 @@ import {
 } from "@/modules/events";
 import { formatMinor } from "@/shared/money";
 import { AppError } from "@/shared/errors";
+import { incidentDispatchInvestigation, incidentGeneratePackage, incidentReadReport } from "./engineering";
 import type { ActionDefinition, AnyAction, ExecutionContext } from "./types";
 
 const define = <I, P, O>(definition: ActionDefinition<I, P, O>) => definition;
@@ -297,7 +298,17 @@ const experiencePublish = define({
     `Publish “${p.snapshot.title}”: ${p.snapshot.capacity} places at ${formatMinor(p.snapshot.priceMinor, p.snapshot.currency)}.`,
 });
 
-const definitions: AnyAction[] = [eventsSearch, experiencesReadAvailability, analyticsRead, demandAnalyze, experienceCreateDraft, experiencePublish];
+const definitions: AnyAction[] = [
+  eventsSearch,
+  experiencesReadAvailability,
+  analyticsRead,
+  demandAnalyze,
+  experienceCreateDraft,
+  experiencePublish,
+  incidentReadReport,
+  incidentGeneratePackage,
+  incidentDispatchInvestigation,
+];
 
 export const actionRegistry: ReadonlyMap<string, AnyAction> = new Map(definitions.map((d) => [d.id, d]));
 

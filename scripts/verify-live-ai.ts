@@ -1,5 +1,6 @@
 import { and, eq, gte, sql } from "drizzle-orm";
-import { askConcierge, createAiGateway, createAnthropicProvider, delegateRecommendation, writeNarratives } from "../src/ai";
+import { askConcierge, createAiGateway, createAnthropicProvider, delegateRecommendation, runEngineeringAgent, writeNarratives } from "../src/ai";
+import { createSimulatedIncident } from "../src/modules/incidents";
 import { createDatabase } from "../src/infrastructure/db/client";
 import { actionRequests, aiUsageRecords, commercialRecommendations, experiences, organizations, users } from "../src/infrastructure/db/schema";
 import { parseServerEnv } from "../src/infrastructure/env";
@@ -44,6 +45,8 @@ try {
   });
   console.log(JSON.stringify({ target, model: env.AI_MODEL_FAST, capMicroUsd, ledgerBefore: spentBefore }));
 
+  const only = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+  if (!only || only === "commerce") {
   // 1. Concierge, as a signed-in seeded attendee (anonymous visitors never get AI).
   const [attendee] = await db.select().from(users).where(eq(users.email, "maya@attendee.gothere.test"));
   if (!attendee) throw new Error("Seed the database first (pnpm db:seed).");
@@ -73,6 +76,18 @@ try {
     const [request] = delegation.approvalRequestId ? await db.select().from(actionRequests).where(eq(actionRequests.id, delegation.approvalRequestId)) : [];
     console.log(JSON.stringify({ step: "organizer_agent", mode: delegation.mode, notice: delegation.notice, summary: delegation.summary, draft: draft ? { status: draft.status, origin: draft.origin, title: draft.title } : null, approval: request ? { status: request.status, initiator: request.initiator, risk: request.risk } : null }));
     rec = undefined;
+  }
+  }
+
+  // 3. Engineering agent on a simulated incident (records only), as the seeded platform admin (local/test seed).
+  if (!only || only === "incident") {
+    const [ops] = await db.select().from(users).where(eq(users.email, "ops@control.gothere.test"));
+    if (!ops) throw new Error("No platform admin in this database (seeded only for local/test).");
+    const admin = { kind: "user" as const, userId: ops.id, email: ops.email, platformRole: "platform_admin" as const };
+    const { incidentId } = await createSimulatedIncident(db, admin, { scenario: "checkout-errors" }, { allowed: true });
+    const agent = await runEngineeringAgent({ db, gateway }, admin, incidentId);
+    const body = agent.analysis.body as { summary?: string; likelyCauses?: { cause: string; evidence: string[] }[]; confidence?: string };
+    console.log(JSON.stringify({ step: "engineering_agent", mode: agent.mode, source: agent.analysis.source, notice: agent.notice, summary: body.summary, causes: body.likelyCauses, confidence: body.confidence, packageGenerated: !!agent.packageId, dispatchRequested: !!agent.dispatchRequestId }));
   }
 
   const rows = await db

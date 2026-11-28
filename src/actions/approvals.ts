@@ -1,13 +1,14 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { type SQL, and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database, DbExecutor } from "@/infrastructure/db/client";
 import { actionRequests, users } from "@/infrastructure/db/schema";
 import { recordAudit } from "@/modules/audit";
-import type { Actor } from "@/modules/identity";
+import { type Actor, requirePlatformAdminById } from "@/modules/identity";
 import { requireOrganizationPermission } from "@/modules/organizations";
 import { AppError, isAppError, toPublicError } from "@/shared/errors";
 import { assertUuid } from "@/shared/ids";
 import { canonicalJson, paramsHash } from "./canonical";
+import { requireActionAuthority } from "./authority";
 import { getAction } from "./registry";
 import type { AnyAction, ExecutionContext } from "./types";
 
@@ -17,7 +18,8 @@ const openStatuses = ["pending_approval", "approved"] as const;
 
 /** Records a request for approval. A second request with identical parameters returns the open one. */
 export async function createActionRequest(ctx: ExecutionContext, action: AnyAction, params: unknown) {
-  if (!ctx.actor || !ctx.organizationId) throw new AppError("FORBIDDEN", "Approval requests need an organization context.");
+  if (!ctx.actor) throw new AppError("FORBIDDEN", "Approval requests need a signed-in requester.");
+  if (action.scope === "organization" ? !ctx.organizationId : ctx.organizationId) throw new AppError("FORBIDDEN", "Wrong scope for this approval request.");
   const hash = paramsHash(params);
   const canonical = JSON.parse(canonicalJson(params)) as Record<string, unknown>;
   const recommendationId = typeof (params as { recommendationId?: unknown }).recommendationId === "string" ? (params as { recommendationId: string }).recommendationId : null;
@@ -52,7 +54,7 @@ export async function createActionRequest(ctx: ExecutionContext, action: AnyActi
         .where(
           and(
             eq(actionRequests.actionId, action.id),
-            eq(actionRequests.organizationId, ctx.organizationId),
+            ctx.organizationId ? eq(actionRequests.organizationId, ctx.organizationId) : isNull(actionRequests.organizationId),
             eq(actionRequests.paramsHash, hash),
             inArray(actionRequests.status, [...openStatuses]),
           ),
@@ -76,11 +78,17 @@ export async function createActionRequest(ctx: ExecutionContext, action: AnyActi
   return { id: row.id, paramsHash: row.paramsHash, expiresAt: row.expiresAt, summary, duplicate: !created };
 }
 
-async function expireOverdue(db: DbExecutor, organizationId: string) {
+async function expireOverdue(db: DbExecutor, organizationId: string | null) {
   await db
     .update(actionRequests)
     .set({ status: "expired" })
-    .where(and(eq(actionRequests.organizationId, organizationId), inArray(actionRequests.status, [...openStatuses]), sql`${actionRequests.expiresAt} <= now()`));
+    .where(
+      and(
+        organizationId ? eq(actionRequests.organizationId, organizationId) : isNull(actionRequests.organizationId),
+        inArray(actionRequests.status, [...openStatuses]),
+        sql`${actionRequests.expiresAt} <= now()`,
+      ),
+    );
 }
 
 export type ActionRequestView = {
@@ -110,11 +118,25 @@ export async function listActionRequests(db: Database, actor: Actor, organizatio
   assertUuid(organizationId, "Organization");
   await requireOrganizationPermission(db, actor, organizationId, "recommendation.read");
   await expireOverdue(db, organizationId);
+  return requestViews(db, eq(actionRequests.organizationId, organizationId));
+}
+
+/** Platform-scope requests (Control Center), optionally those about one incident. Platform admins only. */
+export async function listPlatformActionRequests(db: Database, actor: Actor, options: { incidentId?: string } = {}): Promise<ActionRequestView[]> {
+  await requirePlatformAdminById(db, actor.userId);
+  await expireOverdue(db, null);
+  return requestViews(
+    db,
+    and(isNull(actionRequests.organizationId), options.incidentId ? sql`${actionRequests.params}->>'incidentId' = ${options.incidentId}` : undefined),
+  );
+}
+
+async function requestViews(db: DbExecutor, where: SQL | undefined): Promise<ActionRequestView[]> {
   const rows = await db
     .select({ request: actionRequests, requester: { id: users.id, name: users.name } })
     .from(actionRequests)
     .innerJoin(users, eq(users.id, actionRequests.requestedByUserId))
-    .where(eq(actionRequests.organizationId, organizationId))
+    .where(where)
     .orderBy(desc(actionRequests.createdAt))
     .limit(100);
   const deciderIds = [...new Set(rows.map((r) => r.request.decidedByUserId).filter((id): id is string => !!id))];
@@ -156,7 +178,6 @@ export const decisionSchema = z
   })
   .strict();
 
-const requesterActor = (userId: string): Actor => ({ kind: "user", userId, email: "", platformRole: "attendee" });
 
 /**
  * A human decision on a pending request. The approver must be a member holding `action.approve` and the action's
@@ -167,17 +188,18 @@ export async function decideActionRequest(
   actor: Actor,
   requestId: string,
   input: unknown,
-  options: { correlationId?: string; organizationId?: string } = {},
+  options: { correlationId?: string; organizationId?: string; platformOnly?: boolean } = {},
 ) {
   assertUuid(requestId, "Request");
   const decision = decisionSchema.parse(input);
 
   const decided = await db.transaction(async (tx) => {
     const [row] = await tx.select().from(actionRequests).where(eq(actionRequests.id, requestId)).for("update");
-    if (!row || (options.organizationId && row.organizationId !== options.organizationId)) throw new AppError("NOT_FOUND", "Request not found.");
+    if (!row || (options.organizationId && row.organizationId !== options.organizationId) || (options.platformOnly && row.organizationId !== null)) {
+      throw new AppError("NOT_FOUND", "Request not found.");
+    }
     const action = getAction(row.actionId);
-    await requireOrganizationPermission(tx, actor, row.organizationId, "action.approve");
-    if (action.permission) await requireOrganizationPermission(tx, actor, row.organizationId, action.permission);
+    await requireActionAuthority(tx, actor.userId, action, row.organizationId, "approve");
 
     const [{ expired }] = (await tx.execute<{ expired: boolean }>(sql`SELECT ${row.expiresAt.toISOString()}::timestamptz <= now() AS expired`)).rows as [{ expired: boolean }];
     if (row.status === "pending_approval" && expired) {
@@ -233,7 +255,7 @@ export async function decideActionRequest(
  * approver and the action's preconditions are re-checked first. A business failure rolls the effect back and
  * marks the request failed.
  */
-export async function executeApprovedRequest(db: Database, approver: Actor, requestId: string, options: { correlationId?: string; organizationId?: string } = {}) {
+export async function executeApprovedRequest(db: Database, approver: Actor, requestId: string, options: { correlationId?: string; organizationId?: string; platformOnly?: boolean } = {}) {
   assertUuid(requestId, "Request");
   try {
     return await db.transaction(async (tx) => {
@@ -246,6 +268,7 @@ export async function executeApprovedRequest(db: Database, approver: Actor, requ
             eq(actionRequests.status, "approved"),
             sql`${actionRequests.expiresAt} > now()`,
             options.organizationId ? eq(actionRequests.organizationId, options.organizationId) : undefined,
+            options.platformOnly ? isNull(actionRequests.organizationId) : undefined,
           ),
         )
         .returning();
@@ -254,11 +277,9 @@ export async function executeApprovedRequest(db: Database, approver: Actor, requ
 
       const action = getAction(row.actionId);
       const params = action.params.parse(row.params);
-      if (action.permission) {
-        await requireOrganizationPermission(tx, requesterActor(row.requestedByUserId), row.organizationId, action.permission);
-        await requireOrganizationPermission(tx, approver, row.organizationId, action.permission);
-      }
-      await requireOrganizationPermission(tx, approver, row.organizationId, "action.approve");
+      // Both people must still hold the authority now: the requester to invoke, the approver to approve.
+      await requireActionAuthority(tx, row.requestedByUserId, action, row.organizationId, "invoke");
+      await requireActionAuthority(tx, approver.userId, action, row.organizationId, "approve");
 
       const exec: ExecutionContext = {
         db: tx,

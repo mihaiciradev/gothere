@@ -91,7 +91,7 @@ async function Overview({ searchParams }: { searchParams: SearchParams }) {
             <Empty title="No events yet." />
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto border border-border bg-raised">
+          <div className="mt-4 overflow-x-auto border border-border bg-raised" tabIndex={0} role="region" aria-label="Events table">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left">

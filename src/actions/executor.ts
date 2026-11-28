@@ -2,9 +2,9 @@ import { ZodError } from "zod";
 import { logger } from "@/infrastructure/logging/logger";
 import { recordAudit } from "@/modules/audit";
 import { consumeRateLimit } from "@/modules/operations";
-import { requireOrganizationPermission } from "@/modules/organizations";
 import { AppError, isAppError } from "@/shared/errors";
 import { createActionRequest } from "./approvals";
+import { requireActionAuthority } from "./authority";
 import { getAction } from "./registry";
 import type { ActionContext, ActionOutcome, AnyAction, ExecutionContext } from "./types";
 
@@ -46,10 +46,9 @@ export async function invokeAction(ctx: ActionContext, actionId: string, rawInpu
       throw error instanceof ZodError ? toValidationError(error) : error;
     }
 
-    if (action.scope === "organization") {
+    if (action.scope !== "public") {
       if (!ctx.actor) throw new AppError("UNAUTHENTICATED", "Sign in to continue.");
-      if (!ctx.organizationId || !action.permission) throw new AppError("FORBIDDEN", "This action needs an organization context.");
-      await requireOrganizationPermission(ctx.db, ctx.actor, ctx.organizationId, action.permission);
+      await requireActionAuthority(ctx.db, ctx.actor.userId, action, ctx.organizationId, "invoke");
     }
 
     const rateKey = ctx.actor?.userId ?? ctx.anonymousKey ?? "anonymous";
@@ -67,7 +66,7 @@ export async function invokeAction(ctx: ActionContext, actionId: string, rawInpu
     const output = await action.execute(exec, params);
     return { status: "executed", actionId: action.id, output };
   } catch (error) {
-    if (isAppError(error) && ["FORBIDDEN", "NOT_FOUND", "UNAUTHENTICATED", "RATE_LIMITED"].includes(error.code) && action.scope === "organization") {
+    if (isAppError(error) && ["FORBIDDEN", "NOT_FOUND", "UNAUTHENTICATED", "RATE_LIMITED"].includes(error.code) && action.scope !== "public") {
       await recordAudit(ctx.db, {
         actorType: auditActorType(ctx),
         actorUserId: ctx.actor?.userId ?? null,

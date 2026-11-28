@@ -1,6 +1,7 @@
 import { type Database, getDb } from "@/infrastructure/db/client";
 import { serverEnv, simulatorScenariosEnabled } from "@/infrastructure/env";
 import { logger } from "@/infrastructure/logging/logger";
+import { detectAnomalies, reportReservationExpiryFailure, reportStageFailure } from "@/modules/incidents";
 import { type JobHandlers, type RunSummary, runDueJobs } from "@/modules/operations";
 import {
   type PaymentDeps,
@@ -39,6 +40,8 @@ export type OperationsCycle = {
   expiredReservations: number | null;
   payments: Awaited<ReturnType<typeof reconcilePayments>> | null;
   jobs: RunSummary | null;
+  /** New operational events recorded by the anomaly detectors in this pass. */
+  anomalies: number | null;
   /** Stages that threw; the others still ran. */
   failedStages: string[];
 };
@@ -57,13 +60,18 @@ export async function runOperationsCycle(db: Database = getDb(), options: { jobL
     } catch (error) {
       failedStages.push(name);
       logger.error("operations stage failed", { stage: name, error });
+      await reportStageFailure(db, name, error);
       return null;
     }
   };
-  const expiredReservations = await stage("reservations.sweep", () => sweepOverdueReservations(db, { limit: 200 }));
+  const expiredReservations = await stage("reservations.sweep", () =>
+    sweepOverdueReservations(db, { limit: 200, onFailure: (id, error) => reportReservationExpiryFailure(db, id, error) }),
+  );
   const payments = await stage("payments.reconcile", () => reconcilePayments(db, createSimulatorProvider(db)));
   const jobs = await stage("jobs.run", () =>
     runDueJobs(db, jobHandlers(db, serverEnv().PAYMENT_WEBHOOK_SECRET), { limit: options.jobLimit ?? 25 }),
   );
-  return { expiredReservations, payments, jobs, failedStages };
+  // Last: scan for conditions no request reports (counter drift, stuck provider successes, dead jobs).
+  const anomalies = await stage("incidents.detect", () => detectAnomalies(db));
+  return { expiredReservations, payments, jobs, anomalies, failedStages };
 }

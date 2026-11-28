@@ -67,7 +67,7 @@ async function Approvals({ searchParams }: { searchParams: SearchParams }) {
         {history.length === 0 ? (
           <p className="mt-4 text-sm text-graphite-500">No decisions yet.</p>
         ) : (
-          <div className="mt-4 overflow-x-auto border border-border bg-raised">
+          <div className="mt-4 overflow-x-auto border border-border bg-raised" tabIndex={0} role="region" aria-label="Decision history table">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
@@ -144,7 +144,7 @@ function RequestCard({ request: r, organizationId, canApprove, actorId }: { requ
               <Row term="Price" value={formatPrice(snapshot.priceMinor, snapshot.currency)} />
             </dl>
           ) : (
-            <pre className="mt-3 overflow-x-auto bg-offwhite p-3 font-mono text-xs">{JSON.stringify(r.params, null, 2)}</pre>
+            <pre tabIndex={0} aria-label="Request parameters" className="mt-3 overflow-x-auto bg-offwhite p-3 font-mono text-xs">{JSON.stringify(r.params, null, 2)}</pre>
           )}
           <p className="mt-4 font-mono text-[0.6875rem] text-graphite-500" title={r.paramsHash}>
             Parameter hash {r.paramsHash.slice(0, 12)}…{r.paramsHash.slice(-6)}

@@ -11,6 +11,7 @@ export {
   jsonSchema,
 } from "./gateway";
 export { type ParsedIntent, parseIntent } from "./intent";
+export { type Diagnosis, type EngineeringAgentResult, rulesDiagnosis, runEngineeringAgent } from "./engineering-agent";
 export { type DelegationResult, delegateRecommendation, writeNarratives } from "./organizer-agent";
 export { createAnthropicProvider } from "./providers/anthropic";
 export { type AiMessage, type AiPricing, type AiProvider, AiProviderError, type AiToolSpec, type AiTurnRequest, type AiTurnResponse } from "./types";

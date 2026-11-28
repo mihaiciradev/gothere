@@ -65,7 +65,7 @@ async function EventDetail({ params, searchParams }: { params: Params; searchPar
           Inventory, sales and unmet demand
         </h2>
         <p className="mt-1 text-sm text-graphite-500">“Interested” counts distinct people who joined a waitlist or looked at a sold-out item.</p>
-        <div className="mt-4 overflow-x-auto border border-border bg-raised">
+        <div className="mt-4 overflow-x-auto border border-border bg-raised" tabIndex={0} role="region" aria-label="Inventory, sales and demand table">
           <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="border-b border-border text-left">

@@ -50,7 +50,8 @@ Schema tables live in `src/infrastructure/db/schema/` grouped by bounded context
 | `reservations` | M1 | Idempotent creation, per-user cap, expiry (exactly once), release, owner-only reads. | reservations, reservation_items |
 | `payments` | M1 | Payment start, provider event recording and processing, acceptance policy, reconciliation, simulated refunds, provider simulator, webhook verification. | payment_attempts, payment_provider_events, simulator_payments (simulator only) |
 | `ticketing` | M1 | Order confirmation and idempotent ticket issuance; owner-only order and ticket reads. | orders, tickets |
-| `operations` | M1 | Durable job queue (claim, lease, fence, retry), database rate limiter, AI usage ledger (M3). Incidents in M4. | jobs, api_rate_limits, ai_usage_records |
+| `operations` | M1 | Durable job queue (claim, lease, fence, retry), database rate limiter, AI usage ledger with atomic budget reservations (M3). | jobs, api_rate_limits, ai_usage_records |
+| `incidents` | M4 | Operational events (sanitized, append-only), deduplicated incidents, severity, technical and commercial impact, detectors, diagnostic reports, investigation packages, simulated scenarios, Control Center read models. See [ADR-0012](adr/0012-incident-detection.md). | operational_events, incidents, incident_timeline, investigation_packages |
 | `analytics` | M3 | Demand signals (keyed-hash subjects), sales and per-item insights (live vs seed), deterministic unmet-demand analysis, recommendations, grounded briefs, outcome attribution. | demand_signals, commercial_recommendations |
 
 Outside `modules/` (M3):
@@ -79,7 +80,8 @@ AuditRecord (append-only, references by id only)   Job (durable queue)   Simulat
 M3 adds, per tenant: DemandSignal (→ event, item; search signals are platform-level), CommercialRecommendation
 (→ event, source item, created experience), ActionRequest (approval: params, hash, decision, outcome), and the
 platform-level AiUsageRecord. Composite foreign keys pin demand signals and recommendations to their event's tenant.
-Planned (M4): Incident.
+M4 adds the platform-level Incident (one unresolved per fingerprint) with OperationalEvent (evidence), IncidentTimeline
+and InvestigationPackage; ActionRequest gains a platform scope (no organization).
 
 **Tenancy.** Every tenant-owned row carries `organization_id`. Child rows reference `(event_id, organization_id)` through a composite foreign key to `events(id, organization_id)`, so the database rejects a row whose tenant differs from its parent's. Attendee-owned rows (reservations, orders, tickets) also carry `user_id`; services filter by it. Below the event, composite keys chain every relationship: reservation lines share `event_id` with both their reservation and their inventory item; orders match their reservation on `(id, user_id, event_id)` and their payment attempt on `(id, reservation_id)`; tickets match their order on `(id, reservation_id, user_id, event_id)` and a reservation line on `(reservation_id, inventory_item_id)`. A cross-event or cross-tenant reference is a foreign-key violation.
 
@@ -176,6 +178,22 @@ src/app/organizer/
 Attendee additions: the concierge (`_components/concierge.tsx`) on home and Discover, "Notify me" on sold-out items,
 and demand beacons that report sold-out views and empty searches after the page is shown. All mutations go through
 `/api/*`; pages read through the same permission-checked services.
+
+## Control Center (M4)
+
+```text
+src/app/control/              platform admins only (role re-read from the DB on every page; others get not-found)
+├── page.tsx                  /control   health tiles, open live incidents, simulated incidents (separate), audit trail
+├── incidents/                list with filters; [incidentId]: impact, diagnosis, packages, approvals, timeline, evidence, status
+├── transactions/             simulated payment attempts, decisions, refunds; live vs seed
+└── ai/                       month-to-date spend vs budget, by feature and day, latest calls (no content)
+src/app/api/control/          status, agent, platform actions, decisions (platform-only), simulations, package download
+```
+
+Detection hooks: `app/api/_lib/http.ts` (unhandled errors), `composition/runtime.ts` (stages, skipped holds,
+detectors), `ai/gateway.ts` (provider failures, budget). Engineering agent: `ai/engineering-agent.ts`
+([ADR-0013](adr/0013-governed-engineering-agents.md)). Access gate and CSP: `src/proxy.ts`, `next.config.ts`
+([ADR-0011](adr/0011-pre-release-gate-and-csp.md)).
 
 ## Design system
 

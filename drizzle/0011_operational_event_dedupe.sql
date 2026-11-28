@@ -1,0 +1,2 @@
+ALTER TABLE "operational_events" ADD COLUMN "dedupe_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "operational_events_dedupe_unique" ON "operational_events" USING btree ("fingerprint","dedupe_key") WHERE "operational_events"."dedupe_key" IS NOT NULL;

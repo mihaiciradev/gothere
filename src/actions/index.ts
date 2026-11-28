@@ -5,6 +5,7 @@ export {
   decisionSchema,
   executeApprovedRequest,
   listActionRequests,
+  listPlatformActionRequests,
 } from "./approvals";
 export { canonicalJson, paramsHash } from "./canonical";
 export { executionContext, invokeAction, requiresApproval } from "./executor";

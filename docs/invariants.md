@@ -84,3 +84,17 @@ Status: ✅ enforced and tested · ⏳ planned (milestone).
 | ACT-7 | AI spend never exceeds the monthly budget, even under concurrency | Atomic worst-case reservation (advisory lock) before every provider call, settled afterwards | `ai-gateway › never lets concurrent requests exceed the budget…`, `› stops calling the provider once…`, `› keeps the reserved cost after a timeout…` | ✅ |
 | DEM-1 | A person counts once per item (waitlist) or per item and day (views, searches); identities are not stored as subjects | Keyed-hash subjects; partial unique indexes | `demand-signals › …` | ✅ |
 | DEM-2 | Demand signals belong to the tenant of their event | Composite foreign keys | `demand-signals › rejects a signal whose event belongs to a different tenant…` | ✅ |
+
+## Engineering intelligence (M4)
+
+| ID | Invariant | Enforcement | Test | Status |
+| --- | --- | --- | --- | --- |
+| INC-1 | At most one unresolved incident per fingerprint; occurrences attach to it; resolution is terminal | Partial unique index + advisory lock in the recorder | `incidents › attaches repeated occurrences to one open incident…` | ✅ |
+| INC-2 | Severity only rises | `higherSeverity` in the recorder | `incidents › only ever raises severity…`, unit | ✅ |
+| INC-3 | A persistent condition counts once per dedupe key | Unique (fingerprint, dedupe_key) | `incidents › records a persistent condition once…`, detector tests | ✅ |
+| INC-4 | Stored evidence contains no secrets or personal data and is append-only | `sanitize` before storage; trigger | `incidents › sanitizes messages and contexts…`, unit sanitization | ✅ |
+| INC-5 | Commercial impact uses recorded amounts only; failed requests are never priced | `domain/impact.ts` | unit `counts money only from recorded amounts…`, detector tests | ✅ |
+| INC-6 | Control Center and platform actions are for platform admins, read from the database | `requirePlatformAdminById` | `incidents › is for platform administrators only…` (forged session role rejected) | ✅ |
+| INC-7 | External investigations never run without a human approval, at any severity, and are never reported as executed unless they were | `approval: "always"`; content-hash binding; no adapter connected | `incidents › never runs an external investigation without approval, even for a P0…` | ✅ |
+| INC-8 | The engineering agent sees only the sanitized report and its causes cite real evidence | Report-only prompt; citation filter; runbook fallback | `incidents › keeps causes that cite real evidence…`, `› falls back to the runbook…` | ✅ |
+| INC-9 | Simulated incidents never mix with live telemetry and are refused in production | `origin` on events and incidents; fingerprints include origin | `incidents › simulated incidents are labelled…` | ✅ |

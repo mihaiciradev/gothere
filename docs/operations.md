@@ -172,7 +172,26 @@ expiries, new reservations or payment jobs. `/api/operations/run` reports `faile
 
 ## Incidents (M4)
 
-Severity: P0 critical production/security · P1 major degradation · P2 limited issue · P3 minor. Severity never widens autonomous permissions. Incidents are deduplicated by fingerprint, carry correlation ids, technical and commercial impact, and a sanitized diagnostic report suitable for an external coding agent. Generated investigation packages are labelled distinctly from investigations actually executed.
+Severity: P0 critical production/security (set by people; no detector claims it) · P1 major degradation (purchase path,
+payment or inventory integrity) · P2 limited issue · P3 minor (AI degradation). Severity only rises and never widens
+any action's permissions. Design: [ADR-0012](adr/0012-incident-detection.md), [ADR-0013](adr/0013-governed-engineering-agents.md).
+
+| Kind | Raised by | Severity | Commercial impact |
+| --- | --- | --- | --- |
+| `http.unhandled_error` | API route wrapper (500s) | P1 purchase path, else P2 | failed requests (not priced) |
+| `operations.stage_failed` | maintenance pass | P1 payments/jobs, else P2 | delayed passes |
+| `reservations.expiry_failed` | sweep skipped a hold | P1 | units and value held |
+| `inventory.counter_mismatch` | detector | P1 | units and value at risk |
+| `payments.unreconciled_success` | detector (10-minute grace) | P1 | amount charged without order or refund |
+| `jobs.dead` | detector | P1 payment jobs, else P2 | amount of affected payments |
+| `ai.provider_failure`, `ai.budget_exhausted` | AI gateway | P3 | none (fallbacks) |
+
+Triage in the Control Center (`/control`, platform admins): acknowledge → run the engineering agent (AI diagnosis
+with checked citations, or the runbook) → generate a package (a document only) → request an external investigation
+(HIGH, always approved by a person) → resolve with a note. **No external agent is connected**: an approved dispatch
+fails with "not executed" and the package stays "generated". Simulated scenarios (local/test/preview) create
+labelled records only. The platform admin account is seeded only in local/test, so the deployed preview has no
+Control Center user unless the CTO decides otherwise.
 
 ## Observability
 

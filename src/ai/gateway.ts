@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DbExecutor } from "@/infrastructure/db/client";
 import { logger } from "@/infrastructure/logging/logger";
 import { currentCorrelationId } from "@/infrastructure/request-context";
+import { recordOperationalEvent } from "@/modules/incidents";
 import { recordAiUsage, reserveAiBudget, settleAiUsage } from "@/modules/operations";
 import { type AiMessage, type AiPricing, type AiProvider, AiProviderError, type AiToolSpec } from "./types";
 
@@ -144,6 +145,13 @@ export function createAiGateway(config: AiGatewayConfig): AiGateway {
         if (!reservation) {
           await record({ status: "budget_exceeded" });
           log.warn("AI budget exhausted; falling back", { reserveMicroUsd });
+          await recordOperationalEvent(db, {
+            kind: "ai.budget_exhausted",
+            message: "Monthly AI budget reached; features fall back.",
+            correlationId,
+            context: { feature: request.feature },
+            dedupeKey: new Date().toISOString().slice(0, 7),
+          });
           return { status: "budget_exceeded", model: provider.model, toolCalls };
         }
 
@@ -171,6 +179,13 @@ export function createAiGateway(config: AiGatewayConfig): AiGateway {
             errorCode: kind,
           });
           log.warn("AI call failed", { kind });
+          await recordOperationalEvent(db, {
+            kind: "ai.provider_failure",
+            message: `AI call failed: ${kind}`,
+            correlationId,
+            context: { feature: request.feature, kind, model: provider.model },
+            fingerprintParts: [request.feature, kind],
+          });
           return { status: kind === "timeout" ? "timeout" : "failed", model: provider.model, toolCalls };
         }
         const latencyMs = Date.now() - started;

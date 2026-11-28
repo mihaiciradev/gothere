@@ -18,7 +18,7 @@ Attendee accounts and sessions · tenant commercial data (sales, demand, pricing
 
 Boundaries: browser ↔ Next.js server (session cookie, origin checks); server ↔ PostgreSQL (least-privilege role in deployed environments); server ↔ AI provider (sanitized payloads, server-only key); server ↔ coding agents (sanitized reports only, human approval).
 
-## Controls in place (M0–M1)
+## Controls in place (M0–M4)
 
 | Area | Control |
 | --- | --- |
@@ -46,6 +46,7 @@ Boundaries: browser ↔ Next.js server (session cookie, origin checks); server �
 | Governed actions (M3) | One executor for UI, API and AI (`invokeAction`): strict input, DB authorization with tenant from server context, resources pinned to it, per-action rate limits, preconditions; denials audited. HIGH actions from agents/automations wait for a human; approvals are bound to a SHA-256 hash of canonical params (including a snapshot of what is published), expire after 24 h, execute once in the effect's transaction, and re-check both people's permissions. Params, hash, decision and history are trigger-protected; no deletes. Agents have no approve tool. |
 | AI boundary (M3) | Key, model and budget server-side only; Opus rejected for runtime; AI off unless fully configured. Monthly budget checked before every call; token, step and tool-call caps; timeouts. Prompts wrap attendee text and recommendation facts as untrusted data; the concierge holds read-only public tools; picks filtered to tool results and rendered from the DB. Model briefs stored only if their numbers are grounded. Usage ledger keeps tokens and cost, no content. No personal data is sent: the concierge sends the attendee's message only; organiser prompts contain aggregate figures. |
 | Demand data (M3) | Subjects stored as keyed hashes (never raw user or visitor ids); the concierge records parsed intent, not free text; unmatched searches are re-checked server-side; per-IP limits on beacons. |
+| Engineering intelligence (M4) | Control Center and platform actions require the platform-admin role, re-read from the database on every call (a forged session role is rejected, tested). Operational events are sanitized and append-only (trigger). External investigations: approval always, bound to the package content hash; no external agent connected. Simulated incidents are labelled, counted separately and refused in production. |
 | Reconciliation (pre-M2) | Provider success after a failed attempt is accepted or refunded (never ignored); inferred failures are verified with the provider; `findUnreconciledProviderSuccesses` lists anything unaccounted for. Payment Idempotency-Keys are bound to a request hash. |
 
 ## Risk register
@@ -63,6 +64,10 @@ Boundaries: browser ↔ Next.js server (session cookie, origin checks); server �
 | R-22 | Concierge sends attendee free text to the AI provider (when enabled) | Low | Only for signed-in visitors, only the message (≤ 500 chars), no account data; labelled in the UI; disclosed in the privacy notice (/privacy). |
 | R-23 | Production deployment is reachable before M5 release verification | Low (was Medium) | **Mitigated 2026-11-28** (ADR-0011): server-side password gate on every page and API, fail-closed without a password; only /privacy and self-authenticating machine endpoints are open. Remove with SITE_ACCESS=open after M5. |
 | R-24 | Anyone holding the shared preview password can create an account | Low | Accepted for the private preview; rotate SITE_ACCESS_PASSWORD to revoke all access cookies at once. |
+| R-25 | Incident evidence could leak secrets or personal data to an AI model or an external agent | Low | **Mitigated in M4**: everything is sanitized before storage (tested); the model and packages only ever see the sanitized report; prompts declare it untrusted data. |
+| R-26 | An engineering agent escalates (runs external investigations, merges, deploys, edits financial records) | Low | **Mitigated in M4**: platform actions only, with the admin's rights; dispatch always needs a human approval bound to the package hash; no external agent connected; packages forbid merge, deploy and financial edits; severity never changes policy (tested with P0). |
+| R-27 | Detection is pull-based with no alert channel | Medium | Incidents are visible in the Control Center only. Production: an alert sink (email/Slack) behind the recorder; not added (no paid infrastructure). |
+| R-28 | Incident records include request paths and correlation ids | Low | No bodies, headers or user identifiers are stored; ids in paths are normalised to `:id`. |
 | R-07 | Better Auth `get-session` returns the session token to same-origin JavaScript | Low | Library behaviour; impact requires XSS (see R-02). Revisit with CSP. |
 | R-08 | Rate-limit key is the client IP from `x-forwarded-for` | Low | Correct behind Vercel's proxy; would need `trustedProxies` behind another proxy. |
 | R-09 | Moderate advisory GHSA-67mh-4wv8-2f99 in `esbuild ≤ 0.24.2`, pulled via `better-auth → drizzle-kit` peer | Low | Affects esbuild's dev server only, which we do not run. Track upstream. |
