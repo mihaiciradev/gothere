@@ -1,5 +1,6 @@
 import { type Database, getDb } from "@/infrastructure/db/client";
 import { serverEnv, simulatorScenariosEnabled } from "@/infrastructure/env";
+import { logger } from "@/infrastructure/logging/logger";
 import { type JobHandlers, type RunSummary, runDueJobs } from "@/modules/operations";
 import {
   type PaymentDeps,
@@ -34,16 +35,35 @@ export function jobHandlers(db: Database, webhookSecret: string): JobHandlers {
   };
 }
 
-export type OperationsCycle = RunSummary & { expiredReservations: number; payments: Awaited<ReturnType<typeof reconcilePayments>> };
+export type OperationsCycle = {
+  expiredReservations: number | null;
+  payments: Awaited<ReturnType<typeof reconcilePayments>> | null;
+  jobs: RunSummary | null;
+  /** Stages that threw; the others still ran. */
+  failedStages: string[];
+};
 
 /**
  * One maintenance pass: expire overdue reservations, reconcile payments, run due jobs. Triggered by Vercel
  * Cron, the protected manual endpoint and opportunistically after requests. Correctness never depends on it:
- * expiry is also enforced at read and payment time.
+ * expiry is also enforced at read and payment time. Stages are independent: a failure in one is logged and the
+ * others still run, so one bad row can never stop payment confirmations or refunds.
  */
 export async function runOperationsCycle(db: Database = getDb(), options: { jobLimit?: number } = {}): Promise<OperationsCycle> {
-  const expiredReservations = await sweepOverdueReservations(db, { limit: 200 });
-  const payments = await reconcilePayments(db, createSimulatorProvider(db));
-  const jobs = await runDueJobs(db, jobHandlers(db, serverEnv().PAYMENT_WEBHOOK_SECRET), { limit: options.jobLimit ?? 25 });
-  return { ...jobs, expiredReservations, payments };
+  const failedStages: string[] = [];
+  const stage = async <T>(name: string, run: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await run();
+    } catch (error) {
+      failedStages.push(name);
+      logger.error("operations stage failed", { stage: name, error });
+      return null;
+    }
+  };
+  const expiredReservations = await stage("reservations.sweep", () => sweepOverdueReservations(db, { limit: 200 }));
+  const payments = await stage("payments.reconcile", () => reconcilePayments(db, createSimulatorProvider(db)));
+  const jobs = await stage("jobs.run", () =>
+    runDueJobs(db, jobHandlers(db, serverEnv().PAYMENT_WEBHOOK_SECRET), { limit: options.jobLimit ?? 25 }),
+  );
+  return { expiredReservations, payments, jobs, failedStages };
 }

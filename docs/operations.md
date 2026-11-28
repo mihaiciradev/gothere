@@ -117,6 +117,11 @@ Each operations pass (`runOperationsCycle`) also sweeps overdue reservations and
 
 None of these is needed for correctness: expiry and acceptance decisions use the database clock in the transactional path.
 
+The pass is fault-isolated: sweep, reconciliation and job running are independent stages, and the sweep handles each
+reservation separately. A row that would break an invariant (for example releasing units the counter does not hold)
+is logged as `reservation expiry failed; skipped` and left untouched for investigation; it never blocks other
+expiries, new reservations or payment jobs. `/api/operations/run` reports `failedStages`.
+
 ## Incidents (M4)
 
 Severity: P0 critical production/security · P1 major degradation · P2 limited issue · P3 minor. Severity never widens autonomous permissions. Incidents are deduplicated by fingerprint, carry correlation ids, technical and commercial impact, and a sanitized diagnostic report suitable for an external coding agent. Generated investigation packages are labelled distinctly from investigations actually executed.

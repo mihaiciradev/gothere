@@ -91,6 +91,9 @@ async function purchaseChain() {
     quantity: 1,
     unitPriceMinor: 5000,
   });
+  // Count the hold as reserveUnits would, so the row stays consistent for anything that later sweeps it
+  // (the e2e suite runs on this database after these tests).
+  await db.update(inventoryItems).set({ reserved: sql`${inventoryItems.reserved} + 1` }).where(eq(inventoryItems.id, item.id));
   const [attempt] = await db
     .insert(paymentAttempts)
     .values({ reservationId: reservation!.id, idempotencyKey: crypto.randomUUID(), requestHash: "test", amountMinor: 5000, currency: "EUR" })

@@ -219,6 +219,32 @@ describe("expiry", () => {
     expect(view.status).toBe("expired");
   });
 
+  it("skips an inconsistent hold without blocking other expiries or new reservations", async () => {
+    // A poisoned row: an overdue hold whose units are missing from the counter (releasing it would break an invariant).
+    const poisoned = await createSellableEvent(db, 10);
+    const healthy = await createSellableEvent(db, 10);
+    const poisonedHold = await reserve(await createActor(db), poisoned.event.id, [{ inventoryItemId: poisoned.admission.id, quantity: 1 }]);
+    const healthyHold = await reserve(await createActor(db), healthy.event.id, [{ inventoryItemId: healthy.admission.id, quantity: 1 }]);
+    await db.update(inventoryItems).set({ reserved: 0 }).where(eq(inventoryItems.id, poisoned.admission.id));
+    await forceOverdue(db, poisonedHold.id);
+    await forceOverdue(db, healthyHold.id);
+
+    await expect(sweepOverdueReservations(db, { limit: 1000 })).resolves.toBeGreaterThanOrEqual(1);
+    const [healthyRow] = await db.select().from(reservations).where(eq(reservations.id, healthyHold.id));
+    const [poisonedRow] = await db.select().from(reservations).where(eq(reservations.id, poisonedHold.id));
+    expect(healthyRow!.status).toBe("expired");
+    expect(poisonedRow!.status).toBe("active"); // left for investigation, not silently "fixed"
+    expect((await inventory(db, healthy.admission.id)).reserved).toBe(0);
+
+    // Reserving the affected item still works (its pre-reserve sweep skips the bad row instead of throwing).
+    const next = await reserve(await createActor(db), poisoned.event.id, [{ inventoryItemId: poisoned.admission.id, quantity: 1 }]);
+    expect(next.status).toBe("active");
+
+    // Clean up so later suites (and the e2e run on this database) never meet the poisoned row.
+    await db.update(inventoryItems).set({ reserved: 2 }).where(eq(inventoryItems.id, poisoned.admission.id));
+    await expireReservation(db, poisonedHold.id);
+  });
+
   it("does not let an overdue hold block other buyers, even with no expiry job running", async () => {
     const { event, admission } = await createSellableEvent(db, 2);
     const first = await createActor(db);

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { Database, DbExecutor, Transaction } from "@/infrastructure/db/client";
 import { isUniqueViolation } from "@/infrastructure/db/errors";
+import { logger } from "@/infrastructure/logging/logger";
 import { inventoryItems, reservationItems, reservations } from "@/infrastructure/db/schema";
 import { getEventForSale } from "@/modules/events";
 import type { Actor } from "@/modules/identity";
@@ -231,8 +232,16 @@ export async function sweepOverdueReservations(
     .where(and(eq(reservations.status, "active"), lte(reservations.expiresAt, sql`now()`), filter))
     .limit(options.limit ?? 100);
 
+  // Each reservation is isolated: one inconsistent row (e.g. a release that would break an inventory invariant)
+  // is logged loudly and skipped, never allowed to block every other expiry, a reservation or the job runner.
   let expired = 0;
-  for (const { id } of overdue) if (await expireReservation(db, id)) expired += 1;
+  for (const { id } of overdue) {
+    try {
+      if (await expireReservation(db, id)) expired += 1;
+    } catch (error) {
+      logger.error("reservation expiry failed; skipped", { reservationId: id, error });
+    }
+  }
   return expired;
 }
 
