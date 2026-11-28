@@ -16,7 +16,7 @@ import {
   loadIncident,
   recordOperationalEvent,
 } from "@/modules/incidents";
-import { createReservation } from "@/modules/reservations";
+import { createReservation, expireReservation } from "@/modules/reservations";
 import { expectDbRejection } from "./support/expect-db-error";
 import { actorFor, createActor, createSellableEvent, createUser, expectAppError, forceOverdue, key, openTestDatabase } from "./support/fixtures";
 import { fakeProvider, lastToolResults, toolCall } from "./support/intelligence";
@@ -125,7 +125,9 @@ describe("detectors and commercial impact", () => {
     const [skipped] = await db.select().from(operationalEvents).where(and(eq(operationalEvents.kind, "reservations.expiry_failed"), sql`${operationalEvents.context}->>'reservationId' = ${hold.id}`));
     const incident = await incidentOf(skipped!.incidentId!);
     expect(incident.commercialImpact).toMatchObject({ unitsAtRisk: 2, valueAtRiskMinor: 10_000, affectedHolds: 1 });
+    // Restore consistency and expire the hold so later suites never sweep a leftover.
     await db.update(inventoryItems).set({ reserved: 2 }).where(eq(inventoryItems.id, admission.id));
+    await expireReservation(db, hold.id);
   });
 
   it("raises a P1 incident for a dead payment job", async () => {

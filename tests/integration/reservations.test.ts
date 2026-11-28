@@ -208,7 +208,8 @@ describe("expiry", () => {
 
     const results = await Promise.all([
       ...Array.from({ length: 10 }, () => expireReservation(db, reservation.id)),
-      sweepOverdueReservations(db, { limit: 1000 }).then((n) => n > 0),
+      // Scoped to this item: other suites may leave unrelated overdue holds that a global sweep would also expire.
+      sweepOverdueReservations(db, { inventoryItemIds: [admission.id], limit: 1000 }).then((n) => n > 0),
       getReservationForOwner(db, buyer, reservation.id).then(() => false),
     ]);
 
